@@ -1,0 +1,8 @@
+{
+  "load_db":"ADSPSOLAR",
+  "load_collection":"paper",
+  "export_db":"CONJUGATION",
+  "export_collection":"conjugation",
+  "base_dir":"./",
+  "smiles":"smiles.txt"
+}
