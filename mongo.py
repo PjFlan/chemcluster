@@ -1,11 +1,14 @@
-# -*- coding: utf-8 -*-
+ # -*- coding: utf-8 -*-
 """
-Spyder Editor
-
-This is a temporary script file.
+Created by: Padraic Flanagan
 """
-import json
 import os.path
+import json
+try:
+   import cPickle as pickle
+except:
+   import pickle
+from datetime import datetime
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,86 +16,15 @@ import matplotlib.pyplot as plt
 from pymongo import MongoClient
 from rdkit.Chem import AllChem as Chem
 from rdkit.Chem import Draw
+from rdkit.Chem import BRICS
 from rdkit import DataStructs
 from rdkit import RDLogger
 
 import statsmodels.api as sm
 from patsy import dmatrices
 
-class Config():
-
-    CONF_FILE = 'config.json'
-
-    def __init__(self):
-        self.pandas_config()
-        with open(self.CONF_FILE) as config_file:
-            self.params = json.load(config_file)
-            
-    def pandas_config(self):
-        pd.set_option('display.max_rows', 500)
-        pd.set_option('display.max_columns', 500)
-        pd.set_option('display.width', 1000)
-
-class Mongo():
-
-    def __init__(self):
-        self.client = MongoClient()
-        self.config = Config().params
-        self.db_name = self.config['load_db']
-        self.coll_name = self.config['load_collection']
-        self.connect()
-
-    def connect(self):
-        self.db = self.client[self.db_name]
-        self.collection = self.db[self.coll_name]
-        
-    def resolve_query(self,record_type):
-        if record_type == 'smiles':
-            return self.get_smiles()
-        elif record_type == 'comp_uvvis':
-            return self.get_comp_uvvis()
-        
-    def get_smiles(self):
-        smiles = []
-        smiles_file = self.config['base_dir'] + self.config['smiles']
-        if not os.path.isfile(smiles_file):
-            smiles = self.collection.distinct("PRISTINE.SMI")
-            self.save_to_file(smiles,smiles_file)
-        else:
-            with open(smiles_file) as infile:
-                for smi in infile:
-                    smiles.append(smi[:-2])
-        smiles_df = pd.Series(smiles,name='smiles')
-        return smiles_df
-    
-    def get_comp_uvvis(self):
-        cursor = self.collection.find({},{
-            '_id':0,
-            'PRISTINE.SMI':1,
-            'FILTERED.orca.excited_states.orbital_energy_list':{'$slice':1},
-            'FILTERED.orca.excited_states.orbital_energy_list.amplitude':1,
-            'FILTERED.orca.excited_states.orbital_energy_list.oscillator_strength':1
-        })
-        
-        lambdas = []
-        strengths = []
-        smiles = []
-        for record in cursor:
-            try:
-                smi = record['PRISTINE'][0]['SMI']
-                lambda_comp = record['FILTERED'][0]['orca'][0]['excited_states']['orbital_energy_list'][0]['amplitude']
-                osc_strength = record['FILTERED'][0]['orca'][0]['excited_states']['orbital_energy_list'][0]['oscillator_strength']
-            except KeyError:
-                continue
-            smiles.append(smi)
-            lambdas.append(lambda_comp)
-            strengths.append(osc_strength)
-        return pd.DataFrame({'smiles':smiles,'lambda':lambdas,'strength':strengths})
-    
-    def save_to_file(self,records,file):
-        with open(file,'w') as outfile:
-            for i in records:
-                outfile.write(i + ',\n')
+from helper import MyConfig as Config
+from data import MongoLoader
 
 class ChemBase():
 
@@ -102,19 +34,36 @@ class ChemBase():
         self.fp_sim_map = {'tanimoto':'rdk','dice':'morgan'}
         self.get_molecules()
 
-    def get_molecules(self):
+    def get_molecules(self,from_dump = True,save_dump=True):
+        
         smiles_file = self.config['base_dir'] + self.config['smiles']
         smiles_df = self.extract_db('smiles')
-        suppl = Chem.SmilesMolSupplier(smiles_file,delimiter=',',titleLine=0)
-        rd_mols = [x for x in suppl]
+        
+        if from_dump:
+            rd_mols = self.load_mols()
+        else:
+            suppl = Chem.SmilesMolSupplier(smiles_file,delimiter=',',titleLine=0)
+            rd_mols = [x for x in suppl]
+            if save_dump:
+                self.dump_mols(rd_mols)
         rd_mols_df = pd.Series(rd_mols,name='molecule')
+        
         comp_df = self.extract_db('comp_uvvis')
-
         self.mols_df = pd.concat([smiles_df,rd_mols_df],axis=1)
         self.mols_df.dropna()
         self.mols_df = pd.merge(self.mols_df,comp_df,on='smiles')
-        self.mols_df = self.mols_df[:600]
         
+    def dump_mols(self,mols_list):
+        pickle_file = self.config['base_dir'] + self.config['pickle']
+        with open(pickle_file,'wb') as ph:
+            pickle.dump(mols_list,ph)
+            
+    def load_mols(self):
+        pickle_file = self.config['base_dir'] + self.config['pickle']
+        with open(pickle_file,'rb') as ph:
+            mols_list = pickle.load(ph)
+        return mols_list
+            
     def extract_db(self,record_type):
         db_broker = Mongo()
         return db_broker.resolve_query(record_type)
@@ -173,22 +122,77 @@ class ChemBase():
                   '\nsmiles1: ',row['mol1'],'\nsmiles2: ',row['mol2'],
                   '\noscillator1: ',osc1,'\noscillator2: ',osc2,'\n')
             
+    def fragment(self,mol,from_dump=True):
+        frag_dict = None
+        if from_dump:
+            pickle_file = self.config['base_dir'] + self.config['frag_pickle']
+            with open(pickle_file,'rb') as ph:
+                frag_dict = pickle.load(ph)
+        frags = Fragment.fragment_mol(mol,frag_dict)
+        mol.SetIntProp('leaf_nodes',len(frags))
+        return frags
+            
+    def create_fragments(self,save_dump=False):
+        self.mols_df['fragments'] = self.mols_df.molecule.apply(self.fragment)
+        if save_dump:
+            frag_dict = {}
+            for f_list in self.mols_df.fragments:
+                frag_dict[f_list[0].parent_smiles] = [frag.smiles for frag in f_list]
+            print(frag_dict)
+            self.dump_fragments(frag_dict)
+                
+    def dump_fragments(self,frag_dict):
+        pickle_file = self.config['base_dir'] + self.config['frag_pickle']
+        with open(pickle_file,'wb') as ph:
+            pickle.dump(frag_dict,ph)
+        
+    def frags_metrics(self):
+        totals_df = self.mols_df.molecule.apply(lambda x: x.GetIntProp('leaf_nodes'))
+        mean = totals_df.mean()
+        median = totals_df.median()
+        single_core = totals_df[totals_df.isin([1])].count()
+        metrics_dict = {'mean':mean,'median':median,'singles':single_core}
+        return metrics_dict      
+                
     def linear_sim_lambda_diff(self):
         lambdas = self.mols_df[['smiles','lambda']]
         lambdas = lambdas.set_index('smiles')
         lambdas = lambdas.rename(columns={'lambda':'lam1'})
-        temp = self.sims_df
-        temp = temp.join(lambdas,on='mol1')
+        tmp = self.sims_df
+        tmp = tmp.join(lambdas,on='mol1')
         lambdas = lambdas.rename(columns={'lam1':'lam2'})
-        temp = temp.join(lambdas,on='mol2')
-        temp['difference'] = (temp['lam1']-temp['lam2']).abs()
-        temp = temp.loc[temp.difference <= 500]
-        self.plotting_df = temp
-        y, X = dmatrices('difference ~ similarity', data=temp, return_type='dataframe')
+        tmp = tmp.join(lambdas,on='mol2')
+        tmp['difference'] = (tmp['lam1']-tmp['lam2']).abs()
+        tmp = tmp.loc[tmp.difference <= 500]
+        self.plotting_df = tmp
+        y, X = dmatrices('difference ~ similarity', data=tmp, return_type='dataframe')
         mod = sm.OLS(y, X)
         self.reg_res = mod.fit()
         print(self.reg_res.summary())
         
+        
+class Fragment():
+
+    def __init__(self,parent,smiles):
+        self.parent_smiles = parent
+        self.smiles = smiles
+        
+    @classmethod
+    def fragment_mol(cls,mol,frag_dict=None,keepAllNodes=False):
+        parent = Chem.MolToSmiles(mol)
+        if frag_dict:
+            frag_smiles = frag_dict[parent]
+        else:
+            frag_smiles = list(BRICS.BRICSDecompose(mol,keepNonLeafNodes=keepAllNodes))
+        frags = []
+        for fs in frag_smiles:
+            fragment = cls(parent,fs)
+            frags.append(fragment)
+        return frags
+
+
 if __name__ == '__main__':
+    startTime = datetime.now()
     base = ChemBase()
-    base.similarities('tanimoto')
+    # base.create_fragments(save_dump=False)
+    # print(datetime.now() - startTime)

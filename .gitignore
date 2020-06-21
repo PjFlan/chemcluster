@@ -1,0 +1,6 @@
+data/
+images/
+logs/
+pickle/
+*.log
+__pycache__/

@@ -1,8 +1,39 @@
 {
-  "load_db":"ADSPSOLAR",
-  "load_collection":"paper",
-  "export_db":"CONJUGATION",
-  "export_collection":"conjugation",
-  "base_dir":"./",
-  "smiles":"smiles.txt"
+  "database":{
+      "source":{
+        "database":"ADSPSOLAR",
+        "collection":"paper"
+      },
+      "export":{
+      }
+  },
+  "dirs":{  
+    "root":"/Users/padraicflanagan/scientific-computing/thesis/Source/",
+    "data":"data/",
+    "smiles":"input/smiles.txt",
+    "smiles_ids":"input/smiles_ids.txt",
+    "patterns":"input/patterns.txt",
+    "fragments":"input/",
+    "conjugation":"input/",
+    "pickle":"pickle/",
+    "log":"logs/",
+    "images": "images/"
+  },
+  "logging":{
+    "level": 10
+  },
+  "regenerate":{
+      "smiles": 0,
+      "rdk_mols": 0,
+      "fragments": 0,
+      "smiles_ids":0
+  },
+  "cleaning":{
+    "molecules": {
+      "f_min":0.1,
+      "lambda_min":100,
+      "lambda_max":1300
+    }
+  }
 }
+
