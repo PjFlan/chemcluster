@@ -4,3 +4,4 @@ logs/
 pickle/
 *.log
 __pycache__/
+playground.py

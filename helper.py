@@ -73,14 +73,14 @@ class MyLogger():
 
 class MyFileHandler():
     
-    def output_to_text(self,records,file,delim=','):
+    def output_to_text(self, records, file, delim=','):
         directory = os.path.dirname(file)
         if not os.path.exists(directory):
             os.makedirs(directory)
         with open(file,'w') as fh:
             for row in records:
                 if isinstance(row,list):
-                    row = delim.join(row)
+                    row = delim.join(str(x) for x in row)
                 row += '\n'
                 fh.write(row)
             
