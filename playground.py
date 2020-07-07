@@ -25,3 +25,13 @@ class Solution:
         second.next = first
         first.next = None
         return head
+    
+string = '[#6]-[#8]-[#15](=[#8])(-[#8]-[#6])'
+i = len(string) - 1
+for s in reversed(string):
+    if s == ']':
+        break
+    i -= 1
+string = list(string)
+string[i] = ';D1' + string[i]
+print(''.join(string))

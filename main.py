@@ -4,9 +4,9 @@
 Created on Sat May  9 14:40:36 2020
 @author: padraicflanagan
 """
-from helper import MyConfig,MyLogger,MyFileHandler
-from metrics import FragmentMetric,MoleculeMetric
-from data import MoleculeData,FragmentData
+from helper import MyConfig, MyLogger, MyFileHandler
+from metrics import FragmentMetric, MoleculeMetric, FragmentGroupMetric
+from data import MoleculeData, FragmentData, FragmentGroupData
 from rdkit.Chem import AllChem as Chem
 
 my_config = MyConfig()
@@ -15,14 +15,16 @@ my_fh = MyFileHandler()
 
 frag_metric = FragmentMetric()
 mol_metric = MoleculeMetric()
+frag_group_metric = FragmentGroupMetric()
 mol_data = MoleculeData()
 frag_data = FragmentData()
+frag_group_data = FragmentGroupData()
 
 def draw_leaf_fragments():
     frag_metric.draw_top_frags(to_idx=800)
     
-def draw_frag_groups():
-    frag_metric.draw_top_frags(to_idx=800, groups=True)
+def draw_frag_groups(tier=0):
+    frag_group_metric.draw_frag_groups(tier, to_idx=800)
 
 def draw_frag_parents(id_):
     mol_metric.draw_parent_mols(id_=id_)
@@ -46,7 +48,7 @@ def multi_group_wrapper(groups, save_as=None):
     mol_metric.multi_group_subset(groups=groups, shape=(3,2), save_as=save_as)
 
 def group_violin_plots(groups=[], save_as=None):
-    mol_metric.group_lambda_dist(groups,save_as)
+    mol_metric.group_lambda_dist(groups, save_as)
 
 def most_freq_combos():
     mol_metric.groups_in_combo()
@@ -73,7 +75,5 @@ def assign_frag_groups():
 #molecule_similarities(ids=[3779,3823])
 #groups = assign_frag_groups()
 #draw_frag_groups()
-# x = frag_data.get_frag_groups()
-# m = frag_data.get_frags_with_group(386).iloc[0].get_rdk_mol()
-# patt = '[C;R0;D1;!$(C-[!#6])]'
-# patt = Chem.MolFromSmarts('[C;R0;D1;!$(C-[!#6])]')
+fg = frag_group_data.get_frag_groups(tier=2)
+#frag_group_metric.draw_frag_groups(tier=2)

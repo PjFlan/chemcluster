@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from tabulate import tabulate
 from matplotlib.colors import Normalize, LogNorm, SymLogNorm, PowerNorm
 
-from data import MoleculeData, FragmentData
+from data import MoleculeData, FragmentData, FragmentGroupData
 from helper import MyConfig, MyFileHandler, MyLogger
 
 class Metric:
@@ -171,32 +171,41 @@ class FragmentMetric(Metric):
     def __init__(self):
         super().__init__()
         self.frag_data = FragmentData()
-        self.mol_data = MoleculeData()
-    
-    def draw_top_frags(self, from_idx=0, to_idx=200, groups=False):
-        if not groups:
-            clean_frags = self.frag_data.clean_frags()
-        else:
-            clean_frags = self.frag_data.get_frag_groups()
-        freqs = clean_frags.apply(lambda f: f.occurrence)
-        freq_df = pd.concat([clean_frags, freqs], axis=1)
+        
+    def _draw_frags(self, frags, frag_dir, from_idx, to_idx):
+        freqs = frags.apply(lambda f: f.occurrence)
+        freq_df = pd.concat([frags, freqs], axis=1)
         freq_df.columns = ['fragment','frequency']
         freq_df = freq_df.sort_values(by='frequency', ascending=False).iloc[from_idx:to_idx]
         
         frag_mols = freq_df.apply(lambda f: f['fragment'].get_rdk_mol(), axis=1)
         legends = freq_df.apply(lambda f: f'id: {f["fragment"].id_}, freq: {f["frequency"]}', axis=1)
-    
-        frag_dir = os.path.join(self._config.get_directory('images'),'fragments')
-        suffix = ''
-        if groups:
-            suffix = 'group_'
-        self.draw_mols_canvas(frag_mols, legends, outdir=frag_dir, suffix=suffix, 
+
+        self.draw_mols_canvas(frag_mols, legends, outdir=frag_dir, suffix='', 
                               start_idx=from_idx, per_img=20, per_row=5)
+    
+    def draw_top_frags(self, from_idx=0, to_idx=200):
+
+        clean_frags = self.frag_data.clean_frags()
+        frag_dir = os.path.join(self._config.get_directory('images'),'fragments')
+        self._draw_frags(clean_frags, frag_dir, from_idx, to_idx)
     
     def similarity(self, ids):
         frags = self.frag_data.clean_frags()
         frags = frags[ids].tolist()
         super().similarity(entities=frags)
+        
+        
+class FragmentGroupMetric(FragmentMetric):
+        
+    def __init__(self):
+        super().__init__()
+        self.frag_group_data = FragmentGroupData()
+        
+    def draw_frag_groups(self, tier=0, from_idx=0, to_idx=200):
+        frag_groups = self.frag_group_data.get_frag_groups(tier)
+        fg_dir = os.path.join(self._config.get_directory('images'),f'fragment_groups_{tier}')
+        self._draw_frags(frag_groups, fg_dir, from_idx, to_idx)
         
         
 class MoleculeMetric(Metric):
