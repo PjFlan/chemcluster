@@ -1,7 +1,8 @@
 import os
 from collections import Counter, defaultdict
 import math
-from itertools import combinations
+from itertools import combinations, chain
+import statistics
 
 from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem import rdMolDescriptors as Descriptors
@@ -127,13 +128,10 @@ class Metric:
         d2svg.DrawMolecule(mol)
         d2svg.FinishDrawing()
         return d2svg.GetDrawingText()
-    
-    def similarity(self, entities):
+        
+    def similarity_report(self, entities):
         fps_1 = entities[0].fingerprint()
         fps_2 = entities[1].fingerprint()
-        self.similarity_report(fps_1, fps_2)
-        
-    def similarity_report(self, fps_1, fps_2):
         table = []
         fp_types = fps_1.keys()
         for fp in fp_types:
@@ -187,26 +185,82 @@ class FragmentMetric(Metric):
     def draw_top_frags(self, from_idx=0, to_idx=200):
 
         clean_frags = self.frag_data.clean_frags()
+        clean_frags.set_occurrence()
         frag_dir = os.path.join(self._config.get_directory('images'),'fragments')
-        self._draw_frags(clean_frags, frag_dir, from_idx, to_idx)
+        self._draw_frags(clean_frags, frag_dir, from_idx, to_idx)        
     
     def similarity(self, ids):
         frags = self.frag_data.clean_frags()
         frags = frags[ids].tolist()
-        super().similarity(entities=frags)
+        super().similarity_report(entities=frags)
         
         
 class FragmentGroupMetric(FragmentMetric):
         
     def __init__(self):
+        
         super().__init__()
-        self.frag_group_data = FragmentGroupData()
+        self.fgd = FragmentGroupData()
         
     def draw_frag_groups(self, tier=0, from_idx=0, to_idx=200):
-        frag_groups = self.frag_group_data.get_frag_groups(tier)
+        
+        frag_groups = self.fgd.get_frag_groups(tier)
+        self.fgd.set_occurrence(tier)
         fg_dir = os.path.join(self._config.get_directory('images'),f'fragment_groups_{tier}')
         self._draw_frags(frag_groups, fg_dir, from_idx, to_idx)
         
+    def draw_cluster_groups(self, clust_nums=None, singletons=False, from_idx=0, to_idx=200):
+        
+        cgm = self.fgd.get_group_clusters()
+        groups = self.fgd.get_frag_groups(tier=1)
+        if not clust_nums:
+            clust_nums = range(0, cgm['Cluster'].max() + 1)
+        for clust_num in clust_nums:
+            group_indices = cgm[clust_num == cgm['Cluster']]['Group']
+            groups_tmp = groups[group_indices]
+            if (not singletons) and groups_tmp.size == 1:
+                continue
+            cluster_dir = os.path.join(self._config.get_directory('images'),f'cluster_{clust_num}/')
+            self._draw_frags(groups_tmp, cluster_dir, from_idx, to_idx)
+            
+    def draw_group_parents(self, id_, from_idx=0, to_idx=200):
+        parents = self.fgd.get_group_parent_mols(id_)
+        parent_mols = parents.apply(lambda x: x.get_rdk_mol())
+        fg_parent_dir = os.path.join(self._config.get_directory('images'),f'group_{id_}_parents/')
+        self.fgd.mol_data.set_comp_data()
+        legends = parents.apply(lambda p: f'{p.get_id()} ; {p.lambda_max}nm ; {p.strength_max:.4f}' 
+            if p.lambda_max else '')
+        self.draw_mols_canvas(parent_mols, legends, fg_parent_dir, suffix='', start_idx=from_idx)
+        
+    def draw_cluster_parents(self, cluster):
+        cgm = self.fgd.get_group_clusters()
+        group_idx = cgm[cluster == cgm['Cluster']]['Group']
+        groups = self.fgd.get_frag_groups(tier=1)[group_idx]
+        mols = self.fgd.mol_data.get_molecules()
+        self.fgd.mol_data.set_comp_data()
+        parent_ids = []
+        for group in groups:
+            parent_ids.extend(group.get_parent_mols())
+        parents = mols[parent_ids]
+        parent_mols = parents.apply(lambda x: x.get_rdk_mol())
+        fg_parent_dir = os.path.join(self._config.get_directory('images'),f'cluster_{cluster}_parents/')
+        legends = parents.apply(lambda p: f'{p.get_id()} ; {p.lambda_max}nm ; {p.strength_max:.4f}' 
+                                if p.lambda_max else '')
+        self.draw_mols_canvas(parent_mols, legends, fg_parent_dir, suffix='', start_idx=0)
+        
+    def similarity(self, ids):
+        groups = [self.fgd.get_frag_group(id_) for id_ in ids]
+        super().similarity_report(entities=groups)
+        
+    def comp_data_report(self, id_):
+        parents = self.fgd.get_group_parent_mols(id_)
+        self.fgd.mol_data.set_comp_data()
+        parent_lam = parents.apply(lambda x: x.lambda_max)
+        parent_f = parents.apply(lambda x: x.strength_max)
+        ret_string = f'wavelength: {parent_lam.mean(): .5f} +- {parent_lam.std(): .3f}\n'
+        ret_string = f'{ret_string}strength: {parent_f.mean(): .3f} +- {parent_f.std():.3f}'
+        print(ret_string)
+    
         
 class MoleculeMetric(Metric):
     
@@ -227,16 +281,15 @@ class MoleculeMetric(Metric):
     def similarity(self, ids):
         mols = self.mol_data.get_molecules()
         mols = mols[ids].tolist()
-        super().similarity(entities=mols)
+        super().similarity_report(entities=mols)
         
     def draw_parent_mols(self, group='', id_=None, from_idx=0, to_idx=200):
-        self.mol_data.set_comp_data()
-        self.mol_data.get_fragments()
         if not id_:
             parents = self.mol_data.find_mols_with_pattern(group)
         else:
             parents = self.mol_data.get_parent_mols(id_)
             group = str(id_)
+        self.mol_data.set_comp_data()
         mols = parents.apply(lambda p: p.get_rdk_mol())
         legends = parents.apply(lambda p: f'{p.get_id()} ; {p.lambda_max}nm ; {p.strength_max:.4f}' 
                     if p.lambda_max else '')

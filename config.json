@@ -14,6 +14,7 @@
     "fragment_ids":"input/fragment_ids.txt",
     "molecule_ids":"input/molecule_ids.txt",
     "mol_frag_links":"input/mol_frag_links.txt",
+    "link_tables":"input/",
     "patterns":"input/patterns.txt",
     "fragments":"input/",
     "conjugation":"input/",
@@ -28,12 +29,13 @@
       "smiles": 0,
       "rdk_mols": 0,
       "fragments": 0,
-      "molecule_ids":0,
-      "fragment_ids":0
+      "molecule_ids":1,
+      "fragment_ids":1,
+      "grouping":0
   },
   "cleaning":{
     "molecules": {
-      "f_min":0.1,
+      "f_min":0.01,
       "lambda_min":100,
       "lambda_max":1300
     }

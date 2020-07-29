@@ -17,6 +17,7 @@ import rdkit.RDLogger as RDLogger
 
 import pandas as pd
 
+
 class MyLogger():
     
     class __MyLogger:
@@ -45,7 +46,7 @@ class MyLogger():
         def get_root(self):
             return self._root
         
-        def get_child(self,name):
+        def get_child(self, name):
             child = self._root.getChild(name)
             child.setLevel(logging.DEBUG)
             return child
@@ -53,7 +54,7 @@ class MyLogger():
         def create_formatter(self):
             format_ = '%(asctime)s - %(name)s - %(message)s'
             datefmt='%Y-%m-%d %H:%M'
-            return logging.Formatter(format_,datefmt)
+            return logging.Formatter(format_, datefmt)
         
         def create_file_handler(self):
             if not os.path.isdir(self._DIR):
@@ -68,10 +69,11 @@ class MyLogger():
             MyLogger._instance = MyLogger.__MyLogger()
         return MyLogger._instance 
     
-    def __getattr__(self,name):
-        return getattr(self._instance,name)
+    def __getattr__(self, name):
+        return getattr(self._instance, name)
+    
 
-class MyFileHandler():
+class MyFileHandler:
     
     def output_to_text(self, records, file, delim=','):
         directory = os.path.dirname(file)
@@ -84,7 +86,7 @@ class MyFileHandler():
                 row += '\n'
                 fh.write(row)
             
-    def load_from_text(self,file,delim=','):
+    def load_from_text(self, file, delim=','):
         records = []
         with open(file,'r') as fh:
             for line in fh:
@@ -94,25 +96,26 @@ class MyFileHandler():
                 records.append(row)
         return records
     
-    def load_from_json(self,file):
+    def load_from_json(self, file):
         with open(file) as json_file:
             dict_ = json.load(json_file)
         return dict_
     
-    def output_to_json(self,dict_,file):
+    def output_to_json(self, dict_, file):
         with open(file,'w') as json_file:
-            json.dump(dict_,json_file)
+            json.dump(dict_, json_file)
             
-    def load_from_pickle(self,file):
+    def load_from_pickle(self, file):
         with open(file,'rb') as ph:
             depickled = pickle.load(ph)
         return depickled
             
-    def dump_to_pickle(self,item,file):
+    def dump_to_pickle(self, item, file):
         with open(file,'wb') as ph:
-            pickle.dump(item,ph)
+            pickle.dump(item, ph)        
             
-class MyConfig():
+            
+class MyConfig:
 
     class __MyConfig:
         _CONFIG = 'config.json'
@@ -143,14 +146,14 @@ class MyConfig():
         def rdkit_config(self):
             RDLogger.DisableLog('rdApp.*') 
             
-        def get_directory(self,dir_):
+        def get_directory(self, dir_):
             try:
                 path = self._ROOT + self.params["dirs"][dir_]
             except KeyError:
                 raise MyConfigParamError(dir_)
             return path
         
-        def get_logging(self,param):
+        def get_logging(self, param):
             try:
                 value = self.params["logging"][param]
             except KeyError:
@@ -164,14 +167,14 @@ class MyConfig():
                 raise MyConfigParamError("database.source")
             return info
         
-        def get_regen(self,file_type):
+        def get_regen(self, file_type):
             try:
                 regen_flag = self.params["regenerate"][file_type]
             except KeyError:
                 regen_flag = 0
             return regen_flag
         
-        def get_comp_thresholds(self,entity):
+        def get_comp_thresholds(self, entity):
             try:
                 cleaning = self.params["cleaning"][entity]
             except KeyError:
@@ -186,23 +189,26 @@ class MyConfig():
             MyConfig._instance = MyConfig.__MyConfig()
         return MyConfig._instance
     
-    def __getattr__(self,name):
-        return getattr(self._instance,name)
+    def __getattr__(self, name):
+        return getattr(self._instance, name)
+    
 
 class MyConfigError(Exception):
     
-    def __init__(self,msg=None):
+    def __init__(self, msg=None):
         super().__init__(msg)
+        
         
 class MyConfigParamError(MyConfigError):
     
-    def __init__(self,missing=''):
+    def __init__(self, missing=''):
         msg = f"The parameter '{missing}' is not provided in config.json."
         super().__init__(msg)
         
+        
 class MyConfigFileError(MyConfigError):
     
-    def __init__(self,file=''):
+    def __init__(self, file=''):
         msg = f"File not found. Please ensure the path '{file}' exists."
         super().__init__(msg)
       
