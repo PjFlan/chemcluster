@@ -6,7 +6,7 @@ Created on Sat May  9 14:40:36 2020
 """
 from helper import MyConfig, MyLogger, MyFileHandler
 from metrics import FragmentMetric, MoleculeMetric, FragmentGroupMetric
-from data import MoleculeData, FragmentData, FragmentGroupData
+from absorbomatics import AbsorboMatic
 from rdkit.Chem import AllChem as Chem
 
 my_config = MyConfig()
@@ -16,9 +16,6 @@ my_fh = MyFileHandler()
 fm = FragmentMetric()
 mm = MoleculeMetric()
 fgm = FragmentGroupMetric()
-md = MoleculeData()
-fd = FragmentData()
-fgd = FragmentGroupData()
 
 def draw_leaf_fragments():
     fm.draw_top_frags(to_idx=800)

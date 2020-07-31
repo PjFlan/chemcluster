@@ -211,4 +211,11 @@ class MyConfigFileError(MyConfigError):
     def __init__(self, file=''):
         msg = f"File not found. Please ensure the path '{file}' exists."
         super().__init__(msg)
+        
+        
+class NoDataError(Exception):
+    
+    def __init__(self):
+        msg = "Link tables not populated. Set 'grouping' flag in config.json to 1 and run AbsorboMatic.set_up()."
+        super().__init__(msg)
       
