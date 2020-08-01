@@ -1,10 +1,9 @@
 import os
-from collections import Counter, defaultdict
+from collections import defaultdict
 import math
-from itertools import combinations, chain
-import statistics
+from itertools import combinations
 
-from rdkit.Chem.Draw import rdMolDraw2D
+
 from rdkit.Chem import rdMolDescriptors as Descriptors
 from rdkit.Chem import Fragments
 from rdkit import DataStructs
@@ -15,9 +14,10 @@ import matplotlib.pyplot as plt
 from tabulate import tabulate
 from matplotlib.colors import Normalize, LogNorm, SymLogNorm, PowerNorm
 
-from helper import MyConfig, MyFileHandler, MyLogger
+from helper import MyConfig, MyFileHandler, MyLogger, draw_to_png_stream
 
 class Metric:
+    
     DRAWING_RES = 600
     DRAWING_FONT_SIZE = 30
     
@@ -120,13 +120,11 @@ class Metric:
             file = f'{suffix}{file_begin+start_idx+1}-{file_end+start_idx}.png'
             file = os.path.join(outdir,file)
             curr_mols = mols.iloc[file_begin:file_end].tolist()
-            d2d = rdMolDraw2D.MolDraw2DCairo(full_size[0], full_size[1], sub_img_size[0], sub_img_size[1])
-            d2d.drawOptions().legendFontSize = font_size
-            d2d.DrawMolecules(curr_mols,legends=legends.iloc[file_begin:file_end].tolist())
-            d2d.FinishDrawing()
+            lgnds = legends.iloc[file_begin:file_end].tolist()
+            stream = draw_to_png_stream(curr_mols, full_size, sub_img_size, font_size, lgnds)
             
             with open(file,'wb+') as ih:
-                ih.write(d2d.GetDrawingText())
+                ih.write(stream)
             
             file_num += 1
             file_begin += per_img
@@ -134,12 +132,6 @@ class Metric:
                 file_end = num_mols
             else:
                 file_end += per_img
-
-    def draw_to_svg_stream(self, mol):
-        d2svg = rdMolDraw2D.MolDraw2DSVG(300,300)
-        d2svg.DrawMolecule(mol)
-        d2svg.FinishDrawing()
-        return d2svg.GetDrawingText()
         
     def similarity_report(self, entities):
         fps_1 = entities[0].fingerprint()
@@ -176,6 +168,7 @@ class Metric:
         left_edge = int(mult*size)
         return bins[left_edge]
     
+    
 class FragmentMetric(Metric):
     
     def __init__(self, md, fd, gd, cd):
@@ -186,7 +179,7 @@ class FragmentMetric(Metric):
         clean_frags = self.fd.clean_frags()
         clean_frags.set_occurrence()
         frag_dir = os.path.join(self._config.get_directory('images'),'fragments')
-        self._draw_frags(clean_frags, frag_dir, from_idx, to_idx)        
+        self._draw_entities(clean_frags, frag_dir, from_idx, to_idx)        
     
     def similarity(self, ids):
         frags = self.fd.clean_frags()
@@ -228,9 +221,9 @@ class GroupMetric(Metric):
             if p.lambda_max else '')
         self._draw_mols_canvas(parent_mols, legends, fg_parent_dir, suffix='', start_idx=from_idx)
         
-    def draw_cluster_parents(self, cluster):
-        cgm = self.gd.get_group_clusters()
-        group_idx = cgm[cluster == cgm['cluster_id']]['group_id']
+    def draw_cluster_parents(self, cluster_id):
+
+        group_idx = self.gd.get_cluster_groups(cluster_id)
         groups = self.gd.get_groups()[group_idx]
         mols = self.md.get_molecules()
         self.md.set_comp_data()
@@ -239,7 +232,8 @@ class GroupMetric(Metric):
             parent_ids.extend(group.get_parent_mols())
         parents = mols[parent_ids]
         parent_mols = parents.apply(lambda x: x.get_rdk_mol())
-        fg_parent_dir = os.path.join(self._config.get_directory('images'),f'cluster_{cluster}_parents/')
+        fg_parent_dir = os.path.join(self._config.get_directory('images'),
+                                     f'cluster_{cluster_id}_parents/')
         legends = parents.apply(lambda p: f'{p.get_id()} ; {p.lambda_max}nm ; {p.strength_max:.4f}' 
                                 if p.lambda_max else '')
         self._draw_mols_canvas(parent_mols, legends, fg_parent_dir, suffix='', start_idx=0)
@@ -278,18 +272,20 @@ class MoleculeMetric(Metric):
         mols = mols[ids].tolist()
         super().similarity_report(entities=mols)
         
-    def draw_parent_mols(self, group='', id_=None, from_idx=0, to_idx=200):
-        if not id_:
+    def draw_entity_mols(self, ent_name, group='', ent_id=None, from_idx=0, to_idx=200):
+        mols = self.md.get_molecules()
+        if not ent_id:
             parents = self.md.find_mols_with_pattern(group)
         else:
-            parents = self.md.get_parent_mols(id_)
-            group = str(id_)
+            parents = self.md.get_entity_mols(ent_id, mols, ent_name)
+            group = str(ent_id)
         self.md.set_comp_data()
         mols = parents.apply(lambda p: p.get_rdk_mol())
         legends = parents.apply(lambda p: f'{p.get_id()} ; {p.lambda_max}nm ; {p.strength_max:.4f}' 
                     if p.lambda_max else '')
-        parents_dir = os.path.join(self._config.get_directory('images'),'parents')
-        folder = os.path.join(parents_dir,group)
+        folder = os.path.join(self._config.get_directory('images'), 
+                              f'{ent_name}_{group}_mols/')
+        
         if not os.path.exists(folder):
             os.makedirs(folder)
         
@@ -297,7 +293,7 @@ class MoleculeMetric(Metric):
             mols = mols.iloc[from_idx:to_idx]
             legends = legends.iloc[from_idx:to_idx]
         suffix = group + '_'
-        self.draw_mols_canvas(mols=mols, legends=legends, outdir=folder, start_idx=from_idx, suffix=suffix,
+        self._draw_mols_canvas(mols=mols, legends=legends, outdir=folder, start_idx=from_idx, suffix=suffix,
                               per_img=12, per_row=3)
         
     def mult_dist_plot(self, shape, metrics=None, painters=None, save_as=None):

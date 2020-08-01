@@ -1,65 +1,14 @@
 import re
 from copy import deepcopy
 
-from IPython.display import display, SVG
-
 from rdkit.Chem import AllChem as Chem
 from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem import Descriptors as Descriptors_
 from rdkit.Chem import rdMolDescriptors as Descriptors
 from rdkit.Chem import BRICS
-from rdkit.Chem.Draw.IPythonConsole import ShowMols
-from rdkit.Chem import MACCSkeys
 
-class Fingerprint:
-    
-    def __init__(self, mol=None):
-        self._fp_dict = {}
-        self.fp_map = {"MACCS": self._calc_MACCS, "morgan": self._calc_morgan,
-                  "rdk": self._calc_rdk, "feature": self._calc_morgan_feat,
-                  "topology": self._calc_topology}
-        self._mol = mol
-    
-    def _calc_all(self):
-        for method, fp_func in self.fp_map.items():
-            if not method in self._fp_dict:
-                fp_func()
-
-    def _calc_MACCS(self):
-        self.MACCS = MACCSkeys.GenMACCSKeys(self._mol)
-        self._fp_dict['MACCS'] = self.MACCS
-        
-    def _calc_morgan(self):
-        self.morgan = Chem.GetMorganFingerprintAsBitVect(self._mol, 
-                                                         2, nBits=1024)
-        self._fp_dict['morgan'] = self.morgan
-        
-    def _calc_rdk(self):
-        self.rdk = Chem.RDKFingerprint(self._mol)
-        self._fp_dict['rdk'] = self.rdk
-        
-    def _calc_morgan_feat(self):
-        self.morgan_feat = Chem.GetMorganFingerprintAsBitVect(
-            self._mol ,2, nBits=1024, useFeatures=True)
-        self._fp_dict['morgan_feat'] = self.morgan_feat
-        
-    def _calc_topology(self):
-        self.topology = Chem.GetMorganFingerprintAsBitVect(
-            self._mol, 2, nBits=1024, 
-            invariants=[1]*self._mol.GetNumAtoms())
-        self._fp_dict['topology'] = self.topology
-        
-    def get_fp(self, fp_type):
-        if fp_type == "all":
-            self._calc_all()
-            return self._fp_dict
-        try:
-            return self._fp_dict[fp_type]
-        except KeyError:
-            fp_func = self.fp_map[fp_type]
-            fp_func()
-        return self._fp_dict[fp_type]
-        
+from fingerprint import BasicFingerprint
+from helper import FingerprintNotSetError, draw_to_svg_stream
         
 class Entity:
     
@@ -69,15 +18,15 @@ class Entity:
     def __init__(self, smiles, id_):
         self.smiles = smiles
         self.id_ = id_
-        self.size = 0
+        self._size = 0
         self._mol = None
         
-    def fingerprint(self, fp_type='all'):
+    def basic_fingerprint(self, fp_type='all'):
         try:
             return self.fp.get_fp(fp_type)
         except AttributeError:
-            self.fp = Fingerprint(self.get_rdk_mol())
-            fps = self.fp.get_fp(fp_type)
+            self.base_fp = BasicFingerprint(self.get_rdk_mol())
+            fps = self.base_fp.get_fp(fp_type)
         return fps
     
     def get_rdk_mol(self):
@@ -86,64 +35,16 @@ class Entity:
         self._mol = Chem.MolFromSmiles(self.smiles)
         return self._mol
     
-    def pattern_count(self, pattern):
-        matches = self.get_rdk_mol().GetSubstructMatches(pattern)
-        return len(matches)
+    def remove_stereo(self, smiles):
+        new = re.sub('\[(\w+)@+H*\]',r'\1',smiles)
+        return new
     
-    def has_pattern(self, pattern):
-        return self.get_rdk_mol().HasSubstructMatch(pattern)
-    
-    def draw_to_svg_stream(self):
-        mol = self.get_rdk_mol()
-        d2svg = rdMolDraw2D.MolDraw2DSVG(300,300)
-        d2svg.DrawMolecule(mol)
-        d2svg.FinishDrawing()
-        return d2svg.GetDrawingText()
-    
-    def get_size(self):
-        if self.size:
-            return self.size
-        self.size = Descriptors_.HeavyAtomCount(self.get_rdk_mol())
-        return self.size
-    
-    def set_id(self, id_):
-        self.id_ = id_
-        
-    def get_id(self):
-        return self.id_
-    
-    def _repr_svg_(self):
-        return self.draw_to_svg_stream()
-
-
-        
-class Fragment(Entity):
-
-    _parent_group = None
-    
-    def __init__(self, smiles, id_):
-        super().__init__(smiles, id_)
-        self._parent_mols = []
-        self._group = None
-        
-    def _remove_redundant(self):
-        new_smiles = self._remove_link_atoms(self.smiles)
-        new_smiles = self._remove_stereo(new_smiles)
-        new_mol = Chem.MolFromSmiles(new_smiles)
-        new_mol = self._shrink_alkyl_chains(new_mol)
-        new_smiles = Chem.MolToSmiles(new_mol)
-        return new_smiles
-        
-    def _remove_link_atoms(self, smiles):
+    def remove_link_atoms(self, smiles):
         new = re.sub('\[[0-9]+\*\]','C',smiles)
         #new = re.sub('\(\)','',new)
         return new
     
-    def _remove_stereo(self, smiles):
-        new = re.sub('\[(\w+)@+H*\]',r'\1',smiles)
-        return new
-    
-    def _shrink_alkyl_chains(self, mol):
+    def shrink_alkyl_chains(self, mol):
         
        alkyl_SMARTS = '[C;R0;D1;$(C-[#6,#7,#8;-0])]'
        try:
@@ -159,8 +60,48 @@ class Fragment(Entity):
            mol.ReplaceAtom(atom[0], Chem.Atom(1))
        smi = Chem.MolToSmiles(mol)
        mol = Chem.MolFromSmiles(smi)
-       mol = self._shrink_alkyl_chains(mol)
+       mol = self.shrink_alkyl_chains(mol)
        return mol  
+    
+    def pattern_count(self, pattern):
+        matches = self.get_rdk_mol().GetSubstructMatches(pattern)
+        return len(matches)
+    
+    def has_pattern(self, pattern):
+        return self.get_rdk_mol().HasSubstructMatch(pattern)
+    
+    def get_size(self):
+        if self._size:
+            return self._size
+        self._size = Descriptors_.HeavyAtomCount(self.get_rdk_mol())
+        return self._size
+    
+    def set_id(self, id_):
+        self.id_ = id_
+        
+    def get_id(self):
+        return self.id_
+    
+    def _repr_svg_(self):
+        return draw_to_svg_stream(self.get_rdk_mol())
+    
+        
+class Fragment(Entity):
+
+    _parent_group = None
+    
+    def __init__(self, smiles, id_):
+        super().__init__(smiles, id_)
+        self._parent_mols = []
+        self._group = None
+        
+    def _remove_redundant(self):
+        new_smiles = self.remove_link_atoms(self.smiles)
+        new_smiles = self.remove_stereo(new_smiles)
+        new_mol = Chem.MolFromSmiles(new_smiles)
+        new_mol = self.shrink_alkyl_chains(new_mol)
+        new_smiles = Chem.MolToSmiles(new_mol)
+        return new_smiles
     
     def get_direct_subs(self):
         benzene_SMARTS = 'c1ccccc1'
@@ -285,15 +226,26 @@ class Molecule(Entity):
         
     def get_conjugation(self):
         return self._conjugation
+    
+    def set_abs_fp(self, afp):
+        self._afp = afp
+        
+    def get_abs_fp(self):
+        try:
+            return self._afp
+        except AttributeError:
+            raise FingerprintNotSetError()
 
 
-class Bridge(Fragment):
+class Bridge(Entity):
     
     def __init__(self, smiles, id_):
+        smiles = self.remove_stereo(smiles)
         super().__init__(smiles, id_)
         
 
-class Substituent(Fragment):
+class Substituent(Entity):
     
     def __init__(self, smiles, id_):
+        smiles = self.remove_stereo(smiles)
         super().__init__(smiles, id_)
