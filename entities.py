@@ -8,7 +8,8 @@ from rdkit.Chem import rdMolDescriptors as Descriptors
 from rdkit.Chem import BRICS
 
 from fingerprint import BasicFingerprint
-from helper import FingerprintNotSetError, draw_to_svg_stream
+from helper import FingerprintNotSetError
+from drawing import draw_to_png_stream
         
 class Entity:
     
@@ -82,8 +83,10 @@ class Entity:
     def get_id(self):
         return self.id_
     
-    def _repr_svg_(self):
-        return draw_to_svg_stream(self.get_rdk_mol())
+    def _repr_png_(self):
+
+        legends = []
+        return draw_to_png_stream([self.get_rdk_mol()], legends)
     
         
 class Fragment(Entity):
@@ -113,7 +116,6 @@ class Fragment(Entity):
         core = self.get_core()
         core_mol = Chem.MolFromSmiles(core)
         if not core_mol:
-            print('no_core')
             return []
         if Descriptors.CalcNumRings(core_mol) != 1:
             return []
@@ -235,7 +237,11 @@ class Molecule(Entity):
             return self._afp
         except AttributeError:
             raise FingerprintNotSetError()
+            
+    def _repr_png_(self):
 
+        legends = [f'{self.lambda_max}nm ; {self.strength_max:.4f}']
+        return draw_to_png_stream([self.get_rdk_mol()], legends)
 
 class Bridge(Entity):
     

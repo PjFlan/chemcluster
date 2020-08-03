@@ -14,12 +14,9 @@ import matplotlib.pyplot as plt
 from tabulate import tabulate
 from matplotlib.colors import Normalize, LogNorm, SymLogNorm, PowerNorm
 
-from helper import MyConfig, MyFileHandler, MyLogger, draw_to_png_stream
+from helper import MyConfig, MyFileHandler, MyLogger
 
 class Metric:
-    
-    DRAWING_RES = 600
-    DRAWING_FONT_SIZE = 30
     
     def __init__(self, md, fd, gd, cd):
         self.md, self.fd, self.gd, self.cd = md, fd, gd, cd
@@ -62,18 +59,6 @@ class Metric:
                 ax.yaxis.label.set_visible(False)
         plt.tight_layout()
         
-    def _draw_entities(self, entities, frag_dir, from_idx, to_idx):
-        freqs = entities.apply(lambda x: x.occurrence)
-        freq_df = pd.concat([entities, freqs], axis=1)
-        freq_df.columns = ['entity','occurrence']
-        freq_df = freq_df.sort_values(by='occurrence', ascending=False).iloc[from_idx:to_idx]
-        
-        entities = freq_df.apply(lambda x: x['entity'].get_rdk_mol(), axis=1)
-        legends = freq_df.apply(lambda f: f"id: {f['entity'].id_}, freq: {f['occurrence']}", axis=1)
-
-        self._draw_mols_canvas(entities, legends, outdir=frag_dir, suffix='', 
-                              start_idx=from_idx, per_img=20, per_row=5)
-        
     def basic_histogram(self, data, ax, norm=False, cut_off=0.9, bin_size=1):
         cut_off_val = math.ceil(data.quantile(cut_off))
         upper_bin = self._upper_bin(cut_off_val,bin_size)
@@ -96,46 +81,10 @@ class Metric:
         ax.set_ylabel('Frequency')
         ax.text(0.8,0.9,f'N = {data.size:,}',transform = ax.transAxes)
         return ax
-    
-    def _draw_mols_canvas(self, mols, legends, outdir, suffix, 
-                         start_idx=0, per_img=20, per_row=5):
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-        num_mols = len(mols)
-            
-        if num_mols%per_img == 0:
-            num_files = num_mols//per_img
-        else:
-            num_files = num_mols//per_img + 1
-            
-        res = self.DRAWING_RES
-        sub_img_size= (res, res)
-        n_rows = per_img//per_row
-        full_size = (per_row * sub_img_size[0], n_rows * sub_img_size[1])
-        font_size = self.DRAWING_FONT_SIZE*(res//600)
-        file_num = 1
-        file_begin = 0
-        file_end = per_img
-        while file_num<=num_files:
-            file = f'{suffix}{file_begin+start_idx+1}-{file_end+start_idx}.png'
-            file = os.path.join(outdir,file)
-            curr_mols = mols.iloc[file_begin:file_end].tolist()
-            lgnds = legends.iloc[file_begin:file_end].tolist()
-            stream = draw_to_png_stream(curr_mols, full_size, sub_img_size, font_size, lgnds)
-            
-            with open(file,'wb+') as ih:
-                ih.write(stream)
-            
-            file_num += 1
-            file_begin += per_img
-            if file_num == num_files:
-                file_end = num_mols
-            else:
-                file_end += per_img
         
     def similarity_report(self, entities):
-        fps_1 = entities[0].fingerprint()
-        fps_2 = entities[1].fingerprint()
+        fps_1 = entities[0].basic_fingerprint()
+        fps_2 = entities[1].basic_fingerprint()
         table = []
         fp_types = fps_1.keys()
         for fp in fp_types:
@@ -192,52 +141,6 @@ class GroupMetric(Metric):
     def __init__(self, md, fd, gd, cd):
         super().__init__(md, fd, gd, cd)
         
-    def draw_groups(self, tier=0, from_idx=0, to_idx=200):
-        
-        groups = self.gd.get_groups()
-        g_dir = os.path.join(self._config.get_directory('images'),f'fragment_groups_{tier}')
-        self._draw_groups(groups, g_dir, from_idx, to_idx)
-        
-    def draw_clusters(self, clust_nums=None, singletons=False, from_idx=0, to_idx=200):
-        
-        cgm = self.gd.get_group_clusters()
-        groups = self.gd.get_groups()
-        if not clust_nums:
-            clust_nums = range(0, cgm['cluster_id'].max() + 1)
-        for clust_num in clust_nums:
-            group_indices = cgm[clust_num == cgm['cluster_id']]['group_id']
-            groups_tmp = groups[group_indices]
-            if (not singletons) and groups_tmp.size == 1:
-                continue
-            cluster_dir = os.path.join(self._config.get_directory('images'),f'cluster_{clust_num}/')
-            self._draw_entities(groups_tmp, cluster_dir, from_idx, to_idx)
-            
-    def draw_group_parents(self, id_, from_idx=0, to_idx=200):
-        parents = self.gd.get_group_mols(id_)
-        parent_mols = parents.apply(lambda x: x.get_rdk_mol())
-        fg_parent_dir = os.path.join(self._config.get_directory('images'),f'group_{id_}_parents/')
-        self.md.set_comp_data()
-        legends = parents.apply(lambda p: f'{p.get_id()} ; {p.lambda_max}nm ; {p.strength_max:.4f}' 
-            if p.lambda_max else '')
-        self._draw_mols_canvas(parent_mols, legends, fg_parent_dir, suffix='', start_idx=from_idx)
-        
-    def draw_cluster_parents(self, cluster_id):
-
-        group_idx = self.gd.get_cluster_groups(cluster_id)
-        groups = self.gd.get_groups()[group_idx]
-        mols = self.md.get_molecules()
-        self.md.set_comp_data()
-        parent_ids = []
-        for group in groups:
-            parent_ids.extend(group.get_parent_mols())
-        parents = mols[parent_ids]
-        parent_mols = parents.apply(lambda x: x.get_rdk_mol())
-        fg_parent_dir = os.path.join(self._config.get_directory('images'),
-                                     f'cluster_{cluster_id}_parents/')
-        legends = parents.apply(lambda p: f'{p.get_id()} ; {p.lambda_max}nm ; {p.strength_max:.4f}' 
-                                if p.lambda_max else '')
-        self._draw_mols_canvas(parent_mols, legends, fg_parent_dir, suffix='', start_idx=0)
-        
     def similarity(self, ids):
         groups = [self.gd.get_group(id_) for id_ in ids]
         super().similarity_report(entities=groups)
@@ -271,30 +174,6 @@ class MoleculeMetric(Metric):
         mols = self.md.get_molecules()
         mols = mols[ids].tolist()
         super().similarity_report(entities=mols)
-        
-    def draw_entity_mols(self, ent_name, group='', ent_id=None, from_idx=0, to_idx=200):
-        mols = self.md.get_molecules()
-        if not ent_id:
-            parents = self.md.find_mols_with_pattern(group)
-        else:
-            parents = self.md.get_entity_mols(ent_id, mols, ent_name)
-            group = str(ent_id)
-        self.md.set_comp_data()
-        mols = parents.apply(lambda p: p.get_rdk_mol())
-        legends = parents.apply(lambda p: f'{p.get_id()} ; {p.lambda_max}nm ; {p.strength_max:.4f}' 
-                    if p.lambda_max else '')
-        folder = os.path.join(self._config.get_directory('images'), 
-                              f'{ent_name}_{group}_mols/')
-        
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-        
-        if to_idx and to_idx < len(mols):
-            mols = mols.iloc[from_idx:to_idx]
-            legends = legends.iloc[from_idx:to_idx]
-        suffix = group + '_'
-        self._draw_mols_canvas(mols=mols, legends=legends, outdir=folder, start_idx=from_idx, suffix=suffix,
-                              per_img=12, per_row=3)
         
     def mult_dist_plot(self, shape, metrics=None, painters=None, save_as=None):
         figsize = (8*shape[0], 6*shape[0])

@@ -5,7 +5,7 @@ Created on Sat May  9 14:40:36 2020
 @author: padraicflanagan
 """
 
-import os
+import os, shutil
 try:
    import cPickle as pickle
 except:
@@ -16,21 +16,7 @@ import logging
 
 import pandas as pd
 import rdkit.RDLogger as RDLogger
-from rdkit.Chem.Draw import rdMolDraw2D
 
-
-def draw_to_svg_stream(rdk_mol):
-    d2svg = rdMolDraw2D.MolDraw2DSVG(300,300)
-    d2svg.DrawMolecule(rdk_mol)
-    d2svg.FinishDrawing()
-    return d2svg.GetDrawingText()
-
-def draw_to_png_stream(mols, full_size, sub_img_size, font_size, legends=[]):
-    d2d = rdMolDraw2D.MolDraw2DCairo(full_size[0], full_size[1], sub_img_size[0], sub_img_size[1])
-    d2d.drawOptions().legendFontSize = font_size
-    d2d.DrawMolecules(mols,legends=legends)
-    d2d.FinishDrawing()
-    return d2d.GetDrawingText()
 
 class MyLogger():
     
@@ -126,7 +112,19 @@ class MyFileHandler:
             
     def dump_to_pickle(self, item, file):
         with open(file,'wb') as ph:
-            pickle.dump(item, ph)        
+            pickle.dump(item, ph)   
+            
+    def clean_dir(self, folder):
+
+        for filename in os.listdir(folder):
+            file_path = os.path.join(folder, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print('Failed to delete %s. Reason: %s' % (file_path, e))
             
             
 class MyConfig:
@@ -196,6 +194,10 @@ class MyConfig:
                 cleaning = {}
             return cleaning
         
+        def use_tmp(self):
+            use_tmp = self.params["tmp"]
+            return use_tmp
+        
     _instance = None
         
     def __new__(cls):
@@ -238,5 +240,5 @@ class FingerprintNotSetError(Exception):
     
     def __init__(self):
         msg = "The absorbo-specific fingerprint has not been created for this molecule.\
-        Run AbsorboFingerprint.fingerprint_mol to create."
+            Please generate molecule finerprints."
         super().__init__(msg)

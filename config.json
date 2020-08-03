@@ -18,11 +18,13 @@
     "conjugation":"input/",
     "pickle":"pickle/",
     "log":"logs/",
-    "images": "images/"
+    "images": "images/",
+    "tmp": "tmp/"
   },
   "logging":{
     "level": 10
   },
+  "tmp": 0,
   "regenerate":{
       "smiles": 0,
       "rdk_mols": 0,
