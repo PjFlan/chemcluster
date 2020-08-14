@@ -56,6 +56,8 @@ def fragment_similarities(ids=[]):
 def molecule_similarities(ids=[]):
     mm.similarity(ids)
 
+# painters = [{'title':'Conjugation','xlabel':'Occurrence'},{'title':'Aromatic Rings','xlabel':'Occurrence'},
+#             {'title': 'Aromatic Heterocycles', 'xlabel': 'Occurrence'}, {'title':'Largest Fragment','xlabel':'Occurrence'}]
 
 #mol_distribution(metric='ac',paint={'title':'blah','xlabel':'blah'})
 #comp_hexbin()

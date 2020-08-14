@@ -186,6 +186,9 @@ class MyConfig:
                 regen_flag = 0
             return regen_flag
         
+        def get_flag(self, flag):
+            return self.params['flags'][flag]
+        
         def get_comp_thresholds(self, entity):
             try:
                 cleaning = self.params["cleaning"][entity]

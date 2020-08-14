@@ -229,6 +229,14 @@ class Molecule(Entity):
     def get_conjugation(self):
         return self._conjugation
     
+    def get_legend(self, dev_flag=True):
+        if dev_flag:
+            return f'{self.get_id()} ; {self.lambda_max} nm ; {self.strength_max:.4f}'\
+                if self.lambda_max else ''
+        
+        return f'{self.lambda_max} nm ; {self.strength_max:.4f}'\
+            if self.lambda_max else ''
+    
     def set_abs_fp(self, afp):
         self._afp = afp
         
@@ -240,7 +248,7 @@ class Molecule(Entity):
             
     def _repr_png_(self):
 
-        legends = [f'{self.lambda_max}nm ; {self.strength_max:.4f}']
+        legends = [f'{self.lambda_max} nm ;  {self.strength_max:.3f}']
         return draw_to_png_stream([self.get_rdk_mol()], legends)
 
 class Bridge(Entity):

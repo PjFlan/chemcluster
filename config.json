@@ -37,6 +37,9 @@
       "lambda_min":100,
       "lambda_max":1300
     }
-  }
+  },
+  "flags": {
+    "dev": 0
+    }
 }
 
