@@ -116,4 +116,4 @@ def draw_entities(entities, outdir, from_idx, to_idx):
     entities = freq_df['entity']
     legends = freq_df.apply(lambda f: f"id: {f['entity'].get_id()}, freq: {f['occurrence']}", axis=1)
     draw_mols_canvas(entities, legends, outdir=outdir, 
-                     start_idx=from_idx, per_img=20, per_row=5)     
+                     start_idx=from_idx, per_row=5)     

@@ -5,6 +5,7 @@ Created on Sat Aug  1 12:25:09 2020
 
 @author: padraicflanagan
 """
+import re
 from collections import defaultdict
 
 from rdkit.Chem import AllChem as Chem
@@ -62,7 +63,7 @@ class BasicFingerprint:
         return self._fp_dict[fp_type]
     
 
-class AbsFingerprint:
+class NovelFingerprint:
     
     def __init__(self, mol_data, frag_data, group_data,
                  chain_data):
@@ -137,7 +138,7 @@ class AbsFingerprint:
             groups.add(group)
         mfp = MolFingerprint(g_dict, s_dict, b_dict,
                              groups, bridges, subs)
-        mol.set_abs_fp(mfp)
+        mol.set_novel_fp(mfp)
         return mfp
         
     def get_mol_fingerprints(self):
@@ -150,13 +151,13 @@ class AbsFingerprint:
         self._fps = mols.apply(lambda x: self.fingerprint_mol(x.get_id()))
         return self._fps
     
-    def get_group_fps(self, occurrence=False, exclude_benz=False):
+    def get_group_fps(self, counts=False, exclude_benz=False):
         
         self.get_mol_fingerprints()
         mols = self.md.clean_mols()
-        g_fps = mols.apply(lambda x: x.get_abs_fp().get_group_fp(occurrence))
+        g_fps = mols.apply(lambda x: x.get_novel_fp().get_group_fp(counts))
         if exclude_benz:
-            if occurrence:
+            if counts:
                 is_only_benzene = g_fps.apply(lambda x: len(x) == 1 and list(x)[0][0] == 2)
             else:
                 is_only_benzene = g_fps.apply(lambda x: len(x) == 1 and list(x)[0] == 2)
@@ -166,27 +167,27 @@ class AbsFingerprint:
     def get_full_fps(self, as_set=True):
         self.get_mol_fingerprints()
         mols = self.md.clean_mols()
-        fps = mols.apply(lambda x: x.get_abs_fp().get_full_fp(as_set))
+        fps = mols.apply(lambda x: x.get_novel_fp().get_full_fp(as_set))
         return fps
     
-    def get_sub_fps(self, occurrence=False):
+    def get_sub_fps(self, counts=False):
         
         self.get_mol_fingerprints()
         mols = self.md.clean_mols()
-        s_fps = mols.apply(lambda x: x.get_abs_fp().get_sub_fp(occurrence))
+        s_fps = mols.apply(lambda x: x.get_novel_fp().get_sub_fp(counts))
         return s_fps
   
-    def get_bridge_fps(self, occurrence=False):
+    def get_bridge_fps(self, counts=False):
         
         self.get_mol_fingerprints()
         mols = self.md.clean_mols()
-        b_fps = mols.apply(lambda x: x.get_abs_fp().get_bridge_fp(occurrence))
+        b_fps = mols.apply(lambda x: x.get_novel_fp().get_bridge_fp(counts))
         return b_fps
     
-    def group_fp_query(self, g_query, complete, occurrence):
+    def group_fp_query(self, g_query, complete, counts):
         
-        if occurrence:
-            g_fps = self.get_group_fps(occurrence=True)
+        if counts:
+            g_fps = self.get_group_fps(counts=True)
         else:
             g_fps = self.get_group_fps()
         isin = g_fps.apply(self._check_sets_equal, args=(g_query, complete))
@@ -194,10 +195,10 @@ class AbsFingerprint:
         ret_mols = self._mols[isin.index]
         return ret_mols
     
-    def sub_fp_query(self, s_query, complete, occurrence):
+    def sub_fp_query(self, s_query, complete, counts):
         
-        if occurrence:
-            s_fps = self.get_sub_fps(occurrence=True)
+        if counts:
+            s_fps = self.get_sub_fps(counts=True)
         else:
             s_fps = self.get_sub_fps()
         isin = s_fps.apply(self._check_sets_equal, args=(s_query, complete))
@@ -205,10 +206,10 @@ class AbsFingerprint:
         ret_mols = self._mols[isin.index]
         return ret_mols  
  
-    def bridge_fp_query(self, b_query, complete, occurrence):
+    def bridge_fp_query(self, b_query, complete, counts):
         
-        if occurrence:
-            b_fps = self.get_bridge_fps(occurrence=True)
+        if counts:
+            b_fps = self.get_bridge_fps(counts=True)
         else:
             b_fps = self.get_sub_fps()
         isin = b_fps.apply(self._check_sets_equal, args=(b_query, complete))
@@ -216,22 +217,21 @@ class AbsFingerprint:
         ret_mols = self._mols[isin.index]
         return ret_mols  
     
-    def mols_same_group(self, occurrence=False, pattern='', exclude_benz=False):
+    def mols_same_group(self, counts=False, pattern='', exclude_benz=False):
         if pattern:
             mol_patt_ids = self.md.find_mols_with_pattern(
                 pattern, clean_only=True).index
-            g_fps = self.get_group_fps(occurrence, 
+            g_fps = self.get_group_fps(counts, 
                                        exclude_benz=exclude_benz).loc[mol_patt_ids]
         else:
-            g_fps = self.get_group_fps(occurrence, exclude_benz=exclude_benz)
+            g_fps = self.get_group_fps(counts, exclude_benz=exclude_benz)
         g_fps = g_fps.apply(self._prep_fp_for_grouping)
         tmp_dict = g_fps.groupby(g_fps).groups
         groups_dict = {key: value for key, value in tmp_dict.items()
                        if len(value) > 1}
         return groups_dict
 
-    
-    def mols_with_fp_general(self, fp):
+    def mols_with_fp(self, fp, counts=True):
         
         groups = fp.get('g')
         bridges = fp.get('b')
@@ -239,15 +239,15 @@ class AbsFingerprint:
         sets = []
         if groups:
             s1 = set(self.group_fp_query(set(groups), 
-                                         complete=False, occurrence=False).index)
+                                         complete=False, counts=counts).index)
             sets.append(s1)
         if bridges:  
             s2 = set(self.bridge_fp_query(set(bridges), 
-                                          complete=False, occurrence=False).index)
+                                          complete=False, counts=counts).index)
             sets.append(s2)
         if subs:
             s3 = set(self.sub_fp_query(set(subs), 
-                                       complete=False, occurrence=False).index)
+                                       complete=False, counts=counts).index)
             sets.append(s3)
         mol_ids = list(set.intersection(*tuple(sets)))
         return self._mols[mol_ids]
@@ -260,9 +260,9 @@ class AbsFingerprint:
             mols = self._mols[mol_ids]
 
             for mol in mols:
-                set_1 = mol.get_abs_fp().get_group_fp(occurrence=True)
+                set_1 = mol.get_novel_fp().get_group_fp(counts=True)
                 for mol_c in mols:
-                    set_2 = mol_c.get_abs_fp().get_group_fp(occurrence=True)
+                    set_2 = mol_c.get_novel_fp().get_group_fp(counts=True)
                     diff = list(set.difference(set_1, set_2))
                     sim = list(set.intersection(set_1, set_2))
                     if len(diff) == 1:
@@ -301,29 +301,29 @@ class MolFingerprint:
         self._b_dict = bridges
         self._groups, self._bridges, self._subs = args
         
-    def get_group_fp(self, occurrence=False, as_set=True):
+    def get_group_fp(self, counts=False, as_set=True):
         if not as_set:
             return self._g_dict
-        if occurrence:
+        if counts:
             groups = set(self._g_dict.items())
         else:
             groups = set(self._g_dict)
         return groups
 
         
-    def get_sub_fp(self, occurrence=False, as_set=True):
+    def get_sub_fp(self, counts=False, as_set=True):
         if not as_set:
             return self._s_dict
-        if occurrence:
+        if counts:
             subs = set(self._s_dict.items())
         else:
             subs = set(self._s_dict)
         return subs
     
-    def get_bridge_fp(self, occurrence=False, as_set=True):
+    def get_bridge_fp(self, counts=False, as_set=True):
         if not as_set:
             return self._b_dict
-        if occurrence:
+        if counts:
             bridges = set(self._b_dict.items())
         else:
             bridges = set(self._b_dict)
@@ -331,9 +331,9 @@ class MolFingerprint:
     
     def get_full_fp(self, as_set=True):
         fp_dict = {}
-        fp_dict['bridges'] = self.get_bridge_fp(occurrence=True, as_set=as_set)
-        fp_dict['subs'] = self.get_sub_fp(occurrence=True, as_set=as_set)
-        fp_dict['groups'] = self.get_group_fp(occurrence=True, as_set=as_set)
+        fp_dict['bridges'] = self.get_bridge_fp(counts=True, as_set=as_set)
+        fp_dict['subs'] = self.get_sub_fp(counts=True, as_set=as_set)
+        fp_dict['groups'] = self.get_group_fp(counts=True, as_set=as_set)
         return fp_dict
         
     def _prepare_output(self):
@@ -341,7 +341,6 @@ class MolFingerprint:
             return self._str_rep
         except AttributeError:
             pass
-        
         ret_str = 'bridges: '
         for id_, qty in self._b_dict.items():
             ret_str += f'({id_}, {qty}), '
@@ -352,8 +351,8 @@ class MolFingerprint:
             
         ret_str += '\nsubs: '
         for id_, tup in self._s_dict.items():
-            ret_str += f'({id_}, {tup}), '
-        
+            ret_str += f'({id_}, {list(tup)}), '
+        ret_str = re.sub(',\s\n|,\s$', '\n', ret_str)
         self._str_rep = ret_str
         return ret_str
     
@@ -362,6 +361,7 @@ class MolFingerprint:
         return ret_str
     
     def _repr_png_(self):
+        print(self.__str__())
         mols = []
         lgnds = []
         

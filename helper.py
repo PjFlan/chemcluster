@@ -111,6 +111,9 @@ class MyFileHandler:
         return depickled
             
     def dump_to_pickle(self, item, file):
+        directory = os.path.dirname(file)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
         with open(file,'wb') as ph:
             pickle.dump(item, ph)   
             
@@ -232,16 +235,24 @@ class MyConfigFileError(MyConfigError):
         super().__init__(msg)
         
         
-class NoDataError(Exception):
+class NoLinkTableError(Exception):
     
     def __init__(self):
-        msg = "Link tables not populated. Set 'grouping' flag in config.json to 1 and run AbsorboMatic.set_up()."
+        msg = "Link tables not populated. "
+        msg += "Set 'grouping' flag in config.json to 1 and run Chemformatic.set_up()."
         super().__init__(msg)
       
 
 class FingerprintNotSetError(Exception):
     
     def __init__(self):
-        msg = "The absorbo-specific fingerprint has not been created for this molecule.\
-            Please generate molecule finerprints."
+        msg = "The novel fingerprint has not been created for this molecule. "
+        msg += "Please generate novel finerprints first."
+        super().__init__(msg)
+        
+class CompDataNotSetError(Exception):
+    
+    def __init__(self):
+        msg = "This molecule either has no computational data "
+        msg += "or the computational data has not yet been fetched from the database."
         super().__init__(msg)

@@ -11,6 +11,7 @@
     "root":"/Users/padraicflanagan/scientific-computing/thesis/Source/",
     "data":"data/",
     "smiles":"input/smiles.txt",
+    "comp": "input/comp.json",
     "link_tables":"input/",
     "patterns":"input/patterns.txt",
     "fragments":"input/",
@@ -27,9 +28,10 @@
   "tmp": 0,
   "regenerate":{
       "smiles": 0,
+      "comp": 0,
       "rdk_mols": 0,
-      "fragments": 1,
-      "grouping":0
+      "BRICS": 0,
+      "grouping": 0
   },
   "cleaning":{
     "molecules": {
@@ -39,7 +41,8 @@
     }
   },
   "flags": {
-    "dev": 0
+    "dev": 1,
+    "db": 0
     }
 }
 

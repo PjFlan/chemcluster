@@ -10,7 +10,8 @@ import os
 import pandas as pd
 from pymongo import MongoClient
 
-from helper import MyConfig, MyLogger, MyFileHandler, MyConfigParamError, NoDataError
+from helper import MyConfig, MyLogger, MyFileHandler
+from helper import MyConfigParamError, NoLinkTableError
 
 class Mongo:
 
@@ -22,7 +23,7 @@ class Mongo:
         self._fh = MyFileHandler()
         self._config = MyConfig()
 
-    def _connect(self,conn_info=None):
+    def _connect(self, conn_info=None):
         self._client = MongoClient()
         self._db = self._client[conn_info["database"]]
         self._collection = self._db[conn_info["collection"]]
@@ -34,14 +35,18 @@ class MongoLoad(Mongo):
     
     def __init__(self):
         super().__init__()
+        self._use_db = self._config.get_flag('db')
         self._conn_info = self._config.get_db_source()
  
     def __enter__(self): 
-        self._connect(self._conn_info)
+
+        if self._use_db:
+            self._connect(self._conn_info)
         return self
       
     def __exit__(self, exc_type, exc_value, exc_traceback): 
-        self._close_connection()
+        if self._use_db:
+            self._close_connection()
         
     def resolve_query(self,record_type):
         query_func = 'self.get_' + record_type + '()'
@@ -69,35 +74,47 @@ class MongoLoad(Mongo):
         return smiles_df
     
     def get_comp_uvvis(self):
-        cursor = self._collection.find({}, {
-            '_id':0,
-            'PRISTINE.SMI':1,
-            'FILTERED.orca.excited_states.orbital_energy_list':{'$slice':3},
-            'FILTERED.orca.excited_states.orbital_energy_list.amplitude':1,
-            'FILTERED.orca.excited_states.orbital_energy_list.oscillator_strength':1
-        })
+        regen = self._config.get_regen('comp')
         
-        lambdas = []
-        strengths = []
-        smiles = []
-        for record in cursor:
-            try:
-                smi = record['PRISTINE'][0]['SMI']
-                comp = record['FILTERED'][0]['orca'][0]['excited_states']['orbital_energy_list']
-                lam_1, lam_2, lam_3 = comp[0]['amplitude'], \
-                    comp[1]['amplitude'], comp[2]['amplitude']
-                osc_1, osc_2, osc_3 = comp[0]['oscillator_strength'], \
-                    comp[1]['oscillator_strength'], comp[2]['oscillator_strength']
-            except KeyError:
-                continue
-            smiles.append(smi)
-            osc = [osc_1, osc_2, osc_3]
-            lam = [lam_1, lam_2, lam_3]
-            max_idx = osc.index(max(osc))
-            lambdas.append(lam[max_idx])
-            strengths.append(osc[max_idx])
+        try:
+            comp_file = self._config.get_directory('comp')
+        except MyConfigParamError as e:
+            self._logger.warning(e)
             
-        df = pd.DataFrame({'smiles': smiles,'lambda': lambdas,'strength': strengths})
+        if os.path.isfile(comp_file) and not regen:
+            comp_json = self._fh.load_from_json(comp_file)
+            comp = comp_json['comp']
+            smiles = comp_json['smiles']
+        else:
+            cursor = self._collection.find({}, {
+                '_id':0,
+                'PRISTINE.SMI':1,
+                'FILTERED.orca.excited_states.orbital_energy_list':{'$slice':3},
+                'FILTERED.orca.excited_states.orbital_energy_list.amplitude':1,
+                'FILTERED.orca.excited_states.orbital_energy_list.oscillator_strength':1
+            })
+            
+            comp = []
+            smiles = []
+            for record in cursor:
+                try:
+                    smi = record['PRISTINE'][0]['SMI']
+                    comp_tmp = record['FILTERED'][0]['orca'][0]['excited_states']['orbital_energy_list']
+                    lam_1, lam_2, lam_3 = comp_tmp[0]['amplitude'], \
+                        comp_tmp[1]['amplitude'], comp_tmp[2]['amplitude']
+                    osc_1, osc_2, osc_3 = comp_tmp[0]['oscillator_strength'], \
+                        comp_tmp[1]['oscillator_strength'], comp_tmp[2]['oscillator_strength']
+                except KeyError:
+                    continue
+                smiles.append(smi)
+                osc = [osc_1, osc_2, osc_3]
+                lam = [lam_1, lam_2, lam_3]
+                comp_dict = {'lambda': lam, 'strength': osc}
+                comp.append(comp_dict)
+            if comp_file:
+                comp_json = {'smiles': smiles, 'comp': comp}
+                self._fh.output_to_json(comp_json, comp_file)  
+        df = pd.DataFrame({'smiles': smiles, 'comp': comp})
         df = df.set_index('smiles')
         return df
     
@@ -125,7 +142,7 @@ class LinkTable:
         try:
             link_array = self._fh.load_from_text(link_file)
         except FileNotFoundError:
-            raise NoDataError()
+            raise NoLinkTableError()
         link_array = self._fh.load_from_text(link_file)
         link_table = pd.DataFrame(link_array).apply(pd.to_numeric, errors='coerce')
         return link_table

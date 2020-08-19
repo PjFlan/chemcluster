@@ -2,6 +2,9 @@ data/
 images/
 logs/
 pickle/
+tests/
+tmp/
+*.ipynb
 *.log
 __pycache__/
 playground.py
