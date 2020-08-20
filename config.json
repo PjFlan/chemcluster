@@ -8,7 +8,7 @@
       }
   },
   "dirs":{  
-    "root":"/Users/padraicflanagan/scientific-computing/thesis/Source/",
+    "root":"./",
     "data":"data/",
     "smiles":"input/smiles.txt",
     "comp": "input/comp.json",

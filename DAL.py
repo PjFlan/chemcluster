@@ -1,6 +1,10 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
+"""
+This module is the Data Access Layer (DAL).
+The majority of the application heavy-lifting is
+done in this module. Any algorithms or processing
+that needs to be applied to entities as a collective
+are defined here.
+"""
 import os.path
 import re
 import math
@@ -606,8 +610,8 @@ class FragmentData(EntityData):
         Parameters
         ----------
         regen : boolean, optional
-            ignore any in-memory data and rerun the entire
-            process. The default is False.
+            ignore any in-memory or pickle data and rerun 
+            the entire process. The default is False.
 
         Returns
         -------
@@ -700,7 +704,8 @@ class GroupData(EntityData):
     Attributes
     ----------
     SIMILARITIES : dict
-        {metric_name : RDKit_implementation}
+        {metric_name : RDKit_implementation}. Stores the RDKit
+        implementations of each similarity metric.
     md : MoleculeData
         a MoleculeData instance for accessing the molecules needed
         to create links
@@ -724,7 +729,7 @@ class GroupData(EntityData):
     get_group_clusters(cutoff=0.2, similarity='dice', 
                        fp_type='MACCS', recluster=False, basic=False)
         cluster the Group objects according to their similarity using
-        one of the existing fingerprinting schemes
+        one an existing fingerprinting scheme and similarity metric
     get_cluster_groups(cluster_id)
         get the Groups belonging to a particular cluster
     get_mol_groups(mol_id)
@@ -749,7 +754,7 @@ class GroupData(EntityData):
     
     def _first_round_clustering(self, groups, diverse_groups, clusters):
         """
-        part of basic clustering algorithm - not complete
+        part of my own clustering algorithm - not complete
         """
         remaining_groups = groups.drop(diverse_groups.index)
         cluster_id = 0
@@ -765,7 +770,7 @@ class GroupData(EntityData):
     
     def _second_round_clustering(self, remaining_groups, clusters):
         """
-        part of basic clustering algorithm - not complete
+        part of my own clustering algorithm - not complete
         """
         remaining_copy = remaining_groups.copy()
         i = 0
@@ -786,7 +791,7 @@ class GroupData(EntityData):
             
     def _diversify(self, fps, diverse_groups=100):
         """
-        part of basic clustering algorithm - not complete
+        part of my own clustering algorithm - not complete
         """       
         picker = MaxMinPicker()
         nfps = fps.size
@@ -797,7 +802,7 @@ class GroupData(EntityData):
     
     def _compute_similarity(self, group, fp2):
         """
-        part of basic clustering algorithm - not complete
+        part of my own clustering algorithm - not complete
         """
         fp1 = group.basic_fingerprint('MACCS')
         return DataStructs.DiceSimilarity(fp1, fp2)
@@ -1058,20 +1063,52 @@ class GroupData(EntityData):
         return groups
     
     def get_group_frags(self, group_id):
-        
+        """
+        Get the Fragments that reduce to a particular Group.
+        """
         frags = self.fd.clean_frags()
         group_frags = frags.apply(lambda x: x.get_group() == group_id)
         group_frags = frags.loc[group_frags]
         return group_frags
     
     def get_group_cluster(self, group_id):
-        
-        cgm = self.get_group_clusters()
+        """
+        Get the cluster to which a Group belongs.
+        """
+        cgm = self.get_group_clusters() #cluster group map
         return cgm[cgm['group_id'] == group_id]['cluster_id'].iloc[0]
     
     def get_group_clusters(self, cutoff=0.2, similarity='dice', 
                            fp_type='MACCS', recluster=False, basic=False):
+        """
+        Cluster groups according to similarity.
         
+        Many groups have a lot in common and only different
+        slightly. This method clusters groups that are similar to within
+        a cutoff
+
+        Parameters
+        ----------
+        cutoff : float, optional
+            any two groups whose similarity is more than 1-cutoff
+            cannot be cluster together. The default is 0.2.
+        similarity : str, optional
+            the similarity metric to use. The default is 'dice'.
+        fp_type : str, optional
+            the fingeprint to use. The default is 'MACCS'.
+        recluster : boolean, optional
+            regenerate the clusters rather than using
+            previous in-memory result. The default is False.
+        basic : boolean, optional
+            use my own clustering algorithm. If False then
+            Butina clustering is used. The default is False.
+
+        Returns
+        -------
+        pandas.DataFrame
+            a link table mapping each group to its cluster number.
+
+        """
         if not recluster:
             try:
                 return self._cgm
@@ -1103,17 +1140,25 @@ class GroupData(EntityData):
         return cgm
     
     def get_cluster_groups(self, cluster_id):
-        
+        """ 
+        Return the Groups that share a particular cluster.
+        """
         cgm = self.get_group_clusters()
         return cgm[cgm['cluster_id'] == cluster_id]['group_id']    
     
     def get_mol_groups(self, mol_id):
+        """
+        Return the Groups contained by a particular Molecule.
+        """
         lt = self._linker.get_link_table(f'mol_group')
         group_ids = lt[mol_id == lt['mol_id']][f'group_id']
         groups = self.get_groups().loc[group_ids.values]
         return groups
     
     def get_group_mols(self, group_id=None, group_ids=[]):
+        """ 
+        Return the Molecules that all have a particular Group
+        """
         lt = self._linker.get_link_table(f'mol_group')
         if group_ids:
             mol_ids = lt[lt['group_id'] == group_ids]['mol_id'].unique
@@ -1122,7 +1167,21 @@ class GroupData(EntityData):
         mols = self.md.get_molecules().loc[mol_ids.values]
         return mols
     
-    def find_groups_with_pattern(self, pattern):
+    def find_groups_with_pattern(self, pattern):    
+        """
+        Return the groups that have the substructure 'pattern'
+
+        Parameters
+        ----------
+        pattern : str
+            name of a pattern defined in patterns.txt
+
+        Returns
+        -------
+        pandas.Series
+            only the Groups that contain the pattern
+
+        """
         patt = self.PATTERNS[pattern]
         patt = Chem.MolFromSmarts(patt)
         groups = self.get_groups()
@@ -1131,7 +1190,39 @@ class GroupData(EntityData):
 
 
 class ChainData(EntityData):
+    """
+    a class that performs data processing and algorithms on Substituents
+    and Bridges.
     
+    this class contains methods to create Substituent and Bridges
+    objects from the entire set of Molecule objects, and to transform, 
+    filter or add data these objects.
+
+    Methods
+    -------
+    set_sub_occurrence()
+        determine the number of molecules containing each Group
+    set_bridge_occurrence()
+        determine the number of molecules containing each Group
+    get_bridge(bridge_id)
+        return a particular Bridge object
+    get_bridges(regen=False)
+        create a series of Bridge objects from Molecules
+    get_substituent(sub_id)
+        return a particular Substituent object
+    get_substituents(regen=False)
+        create a series of Substituent objects from Molecules
+    get_mol_subs(mol_id)
+        return the Substituents contained by particular Molecule
+    get_sub_mols(sub_id)
+        return the Molecules that contain a particular Substituent
+    get_mol_bridges(mol_id)
+        return the Bridges contained by a particular Molecule
+    get_bridge_mols(bridge_id)
+        return the Molecules that contain a particular Bridge
+    find_subs_with_pattern(pattern)
+        return substituents that have the substructure 'pattern'
+    """  
     def __init__(self, mol_data, frag_data, group_data):
         self.md, self.fd, self.gd = mol_data, frag_data, group_data
         self._configure()
@@ -1141,24 +1232,55 @@ class ChainData(EntityData):
         self._substituents = pd.Series([], dtype=object)
         self._bridges = pd.Series([], dtype=object)
         
-    def _create_sub_objects(self, subs, groups, existing_subs):
+    def _create_sub_objects(self, chains, groups, existing_subs):
+        """
+        Creates Substituent objects from their SMILES strings.
+        
+        Takes a list of chain segments that were generated by
+        stripping a certain core group from the molecule.
+        First checks if each chain segment is an actual substituent
+        by checking if the chain contains another core Group. If it does
+        then it cannot be a substituent (not terminal). This method is 
+        called individually for every molecule.
+
+        Parameters
+        ----------
+        chains : list
+            a list of chain SMILES that were generated by removing
+            a core group from the molecule.
+        groups : list
+            a list of the Group objects that the molecule contains
+        existing_subs : dict
+            {sub_smiles : sub_object}. A dictionary of already
+            existing substituents. The objects created in this method
+            are added to this dictionary.
+
+        Returns
+        -------
+        obj_subs : TYPE
+            DESCRIPTION.
+
+        """
         obj_subs = []
 
-        for sub in subs:  
-            mol = Chem.MolFromSmiles(sub)
+        for chain in chains:  
+            chain_mol = Chem.MolFromSmiles(chain)
             sub_flag = True
             for group in groups:
-                if mol.HasSubstructMatch(group):
+                if chain_mol.HasSubstructMatch(group):
                     sub_flag = False
                     break
             if not sub_flag:
                 continue
 
-            test_sub = re.sub('\[*[0-9]*\*+\]*', '[*]', sub)
+            test_sub = re.sub('\[*[0-9]*\*+\]*', '[*]', chain)
+            #Check to see if already exists
             try:
+               
                 sub_obj = existing_subs[test_sub]
                 obj_subs.append(sub_obj)
             except KeyError:
+                #doesnt exist
                 id_ = len(existing_subs)
                 new_sub = Substituent(test_sub, id_)
                 existing_subs[test_sub] = new_sub
@@ -1166,7 +1288,9 @@ class ChainData(EntityData):
         return obj_subs
     
     def _create_bridge_objects(self, bridges, existing_bridges):
-        
+        """
+        Creates Bridge objects from their SMILES strings.
+        """
         obj_bridges = []
         for bridge in bridges:
             try:
@@ -1180,45 +1304,103 @@ class ChainData(EntityData):
         return obj_bridges
 
     def _get_chains(self, mol, rdk_group, other_atoms, match):
+        """
+        Returns a list of the sidechains on a particular group
+        
+        A sidechain is anything that branches off from a core
+        group (rdk_group). When a core is removed, the resulting molecule 
+        consists of non-connected fragments and each fragment is a sidechain.
+        
+        Parameters
+        ----------
+        mol : Molecule
+            the molecule whose chain segments to get
+        rdk_group : RDKit.Mol
+            the group whose sidechains to get
+        other_atoms : set
+            the atom indices of every atom in the molecule
+            except the atom indices of the group being analysed
+        match : set
+            the atom indices of the group being analsyed
+
+        Returns
+        -------
+        TYPE
+            DESCRIPTION.
+
+        """
         if match.issubset(other_atoms):
+            #group is subset of another group
+            #leave the analysis to the larger group
             return []
-        rm = Chem.ReplaceCore(mol, rdk_group, matches=tuple(match), labelByIndex=True)
+        rm = Chem.ReplaceCore(mol, rdk_group, matches=tuple(match), 
+                              labelByIndex=True)
         smiles = Chem.MolToSmiles(rm)
         if not smiles:
             return []
-        branches = smiles.split('.')
-        return branches
+        #each sidechain separated by . in the SMILES
+        sidechains = smiles.split('.')
+        return sidechains
     
     def _get_chain_df(self, reset=False):
+        """
+        Creates the dataframe needed for finding bridges and substituents.
+        
+        This dataframe is generated before any processing is performed
+        on the molecules. It is central to the algorithms for finding subs and bridges.
+        It goes through every molecule in the database and finds an exhaustive list 
+        of every possible sidechain in the molecule.
+        A sidechain is any branch emenating from a core group. A sidechain might
+        be a substituent if it contains no other groups, a bridge if it contains
+        other groups but also atoms that dont belong to any group, or it might contain
+        neither if the group is directly attached to another group (i.e. the sidechain
+        consists of only another core group).
+
+        """
         if not reset:
             try:
                 return self._chain_df
             except AttributeError:
                 pass
-        my_mols = self.md.clean_mols()
+        mols = self.md.clean_mols()
         groups = self.gd.get_groups()
         groups_size = groups.apply(lambda x: x.get_size())
         groups = groups[groups_size.index]
         tmp = []
-        for my_mol in my_mols:
+        for mol in mols:
             other_atoms = []
-            mgs = self.gd.get_mol_groups(my_mol.get_id())
-            is_taa = mgs.apply(lambda x: x.is_taa)
-            mgs = mgs[~is_taa]
-            #important: so that other atoms can be found in the case of being subset of larger group
-            sizes = groups_size[mgs.index].sort_values(ascending=True) 
-            mgs = mgs.loc[sizes.index]
-            matches = [self._get_matches(my_mol.get_rdk_mol(), g.get_rdk_mol(), 
-                                         other_atoms) for g in mgs]
-            records = [[my_mol.get_id(), my_mol, g, g.get_rdk_mol(), 
-                        matches[i], other_atoms[i]] for i, g in enumerate(mgs)]
+            #get the groups in this molecule
+            groups = self.gd.get_mol_groups(mol.get_id())
+            #triarylamine needs special treatment
+            is_taa = groups.apply(lambda x: x.is_taa)
+            groups = groups[~is_taa]
+            
+            #important: so that other atoms can be found in the case 
+            #of being a subset of larger group.
+            sizes = groups_size[groups.index].sort_values(ascending=True) 
+            groups = groups.loc[sizes.index]
+            matches = [self._get_matches(mol.get_rdk_mol(), g.get_rdk_mol(), 
+                                         other_atoms) for g in groups]
+            records = [[mol.get_id(), mol, g, g.get_rdk_mol(), 
+                        matches[i], other_atoms[i]] for i, g in enumerate(groups)]
             tmp.extend(records)
             
+        #m_id=molecule ID, m=Molecule object, g=Group object,
+        #rdk_g=RDKit.Mol representation of Group, ms=matches, oa=other_atoms
         df = pd.DataFrame(tmp, columns=['m_id', 'm', 'g', 'rdk_g','ms', 'oa'])
         self._chain_df = df
         return df
     
     def _get_bridges(self, my_mol, rdk_groups, mol_subs, bridges_dict):
+        """ 
+        Find the bridges belonging to a particular molecule
+        
+        It works by stripping away each group from the molecule to
+        produce a list of non-connected fragments. Out of this fragments,
+        it checks if any correspond to a substituent and if it does then
+        it is not a bridge. Anything left over is a bridge. As such it requires
+        that the substituents of a molecule have already been found.
+        """
         
         trimmed_mol = my_mol.get_rdk_mol()
         
@@ -1249,6 +1431,13 @@ class ChainData(EntityData):
     
     def _get_substituents(self, my_mol, my_group, rdk_groups, other_atoms, 
                   matches, mol_subs_map, subs_dict):
+        """ 
+        Find the substituents belonging to a particular molecule
+        
+        Go through every sidechain in the molecule and check if it contains
+        another group. If it does, then the sidechain is not a substituent
+        and if it does not, then it is a substituent
+        """
         rdk_mol = my_mol.get_rdk_mol()
         rdk_group = my_group.get_rdk_mol()
         for i in range(0, len(matches)):
@@ -1261,14 +1450,53 @@ class ChainData(EntityData):
             mol_subs_map.extend(new_records)
             
     def _get_matches(self, mol, group, other_atoms):
+        """
+        Return the atom indices that match a group in a molecule.
+        
+        If a group occurs more than once, return a list of the 
+        different matching instances.
+
+        Parameters
+        ----------
+        mol : Molecule
+            the molecule to check for matches
+        group : Group
+            the group whose matching atoms to find
+        other_atoms : list
+            a list of sets where each set contains the other atoms
+            in the molecule that a particular group knows about. These
+            other atoms are themselves in groups and each group only
+            knows about the atoms of groups smaller than it.
+
+        Returns
+        -------
+        g_matches : tuple
+            a tuple of matching atom indices. If group occurs
+            more than once, a tuple of tuples.
+
+        """
+        
+        
         g_matches = mol.GetSubstructMatches(group)
         g_matches = [set(match) for match in g_matches]
         try:     
+            #all atoms in the molecule that are part of this group
+            #potentially across separate group instances
             all_matches = reduce(lambda s1, s2: s1.union(s2), g_matches)
         except TypeError:
+            #known RDKit bug with 1 particular molecule
             all_matches = {}
         for atoms in other_atoms:
+            #go through the other_atoms for every group
+            #that was previously dealt with and update its
+            #other_atoms with the atoms of this current group
             atoms.update(all_matches)
+        #add an empty set for this current group that will
+        #be updated with the atoms of the next group in
+        #the molecule. Groups are searched from smallest to largest
+        #so a larger group does not know about the other_atoms belonging
+        #to smaller groups. The smallest group knows about the other_atoms
+        #belonging to every other group
         other_atoms.append(set())
         return g_matches
     
@@ -1323,12 +1551,6 @@ class ChainData(EntityData):
         self.pickle(self._bridges, 'bridges') #must be last line
         return self._bridges
     
-    def find_subs_with_pattern(self, pattern):
-        patt = Chem.MolFromSmarts(self.PATTERNS[pattern])
-        subs = self.get_substituents()
-        has_patt = subs.apply(lambda x: x.has_pattern(patt))
-        return subs[has_patt]
-    
     def get_substituent(self, sub_id):
         subs = self.get_substituents()
         return subs.loc[sub_id]
@@ -1347,6 +1569,10 @@ class ChainData(EntityData):
         mol_subs_map = []
         subs_dict = {}
 
+        #This dataframe contains an exhaustive list of 
+        #every sidechain the molecule. The algorithm below
+        #seeks to work out if a sidechain is a substituent
+        #or not.
         df = self._get_chain_df()
         for idx, row in df.iterrows():
 
@@ -1386,7 +1612,26 @@ class ChainData(EntityData):
         mol_ids = lt[bridge_id == lt['bridge_id']]['mol_id']
         mols = self.md.get_molecules().loc[mol_ids.values]
         return mols
-        
+    
+    def find_subs_with_pattern(self, pattern):
+        """
+        Return the groups that have the substructure 'pattern'
+
+        Parameters
+        ----------
+        pattern : str
+            name of a pattern defined in patterns.txt
+
+        Returns
+        -------
+        pandas.Series
+            only the Groups that contain the pattern
+        """
+        patt = Chem.MolFromSmarts(self.PATTERNS[pattern])
+        subs = self.get_substituents()
+        has_patt = subs.apply(lambda x: x.has_pattern(patt))
+        return subs[has_patt]
+           
 def set_up():
     global md, fd, gd, cd
     md = MoleculeData()

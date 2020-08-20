@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Sat Aug  1 12:25:09 2020
-
-@author: padraicflanagan
+This module defines the novel fingerprint class.
+The implementations for the fingerprint queries are
+defined in this module. This module also exposes a class for 
+accessing the traditional fingerprints.
 """
 import re
 from collections import defaultdict
@@ -13,58 +12,17 @@ from rdkit.Chem import MACCSkeys
 
 from drawing import draw_to_png_stream
 
-class BasicFingerprint:
-    
-    def __init__(self, mol=None):
-        self._fp_dict = {}
-        self.fp_map = {"MACCS": self._calc_MACCS, "morgan": self._calc_morgan,
-                  "rdk": self._calc_rdk, "morgan_feat": self._calc_morgan_feat,
-                  "topology": self._calc_topology}
-        self._mol = mol
-    
-    def _calc_all(self):
-        for method, fp_func in self.fp_map.items():
-            if not method in self._fp_dict:
-                fp_func()
 
-    def _calc_MACCS(self):
-        self.MACCS = MACCSkeys.GenMACCSKeys(self._mol)
-        self._fp_dict['MACCS'] = self.MACCS
-        
-    def _calc_morgan(self):
-        self.morgan = Chem.GetMorganFingerprintAsBitVect(self._mol, 
-                                                         2, nBits=1024)
-        self._fp_dict['morgan'] = self.morgan
-        
-    def _calc_rdk(self):
-        self.rdk = Chem.RDKFingerprint(self._mol)
-        self._fp_dict['rdk'] = self.rdk
-        
-    def _calc_morgan_feat(self):
-        self.morgan_feat = Chem.GetMorganFingerprintAsBitVect(
-            self._mol ,2, nBits=1024, useFeatures=True)
-        self._fp_dict['morgan_feat'] = self.morgan_feat
-        
-    def _calc_topology(self):
-        self.topology = Chem.GetMorganFingerprintAsBitVect(
-            self._mol, 2, nBits=1024, 
-            invariants=[1]*self._mol.GetNumAtoms())
-        self._fp_dict['topology'] = self.topology
-        
-    def get_fp(self, fp_type):
-        if fp_type == "all":
-            self._calc_all()
-            return self._fp_dict
-        try:
-            return self._fp_dict[fp_type]
-        except KeyError:
-            fp_func = self.fp_map[fp_type]
-            fp_func()
-        return self._fp_dict[fp_type]
+class NovelFingerprintData:
+    """
+    Determine and set the novel fingerprint for each molecule.
     
-
-class NovelFingerprint:
-    
+    This class uses the pools of fragment entities extracted in
+    DAL.py and the associated link tables between entities to 
+    determine the entities contained by each molecule. The logic
+    for using these novel fingerprints to construct and execute
+    queries is also found in this class.
+    """
     def __init__(self, mol_data, frag_data, group_data,
                  chain_data):
         self.md, self.fd, self.gd, self.cd =\
@@ -78,6 +36,14 @@ class NovelFingerprint:
         self._bridges = self.cd.get_bridges()
         
     def _prep_fp_for_grouping(self, fp, full=False):
+        """
+        Convert a fingerprint set object to a str.
+        
+        The fingerprints encoded as tuples of sets cannot be passed
+        to the Pandas groupby function. This function takes these
+        tuples and produces a order-deterministic string
+        representation.
+        """
         if full:
             ret_str = ''
             for ent, ent_fp in sorted(fp.items()):
@@ -91,6 +57,23 @@ class NovelFingerprint:
         return ret_str
     
     def _check_sets_equal(self, set1, set2, complete):
+        """
+        Check if two sets interect.
+
+        Parameters
+        ----------
+        set1 : set
+        set2 : set
+        complete : boolean
+            If True, the sets must match exactly. If not,
+            set2 only need be a subset of set1.
+
+        Returns
+        -------
+        TYPE
+            DESCRIPTION.
+
+        """
         if complete:
             return set1 == set2
         return set2.issubset(set1)
@@ -102,6 +85,9 @@ class NovelFingerprint:
         return fp
         
     def fingerprint_mol(self, mol_id):
+        """
+        Generate the novel fingerprint for a molecule
+        """
         mol = self.md.get_molecule(mol_id)
         groups, bridges, subs = set(), set(), set()
         
@@ -136,13 +122,15 @@ class NovelFingerprint:
             g_dict[g_id] += mol.pattern_count(group.get_rdk_mol())
             mol.pattern_count(group.get_rdk_mol())
             groups.add(group)
-        mfp = MolFingerprint(g_dict, s_dict, b_dict,
+        mfp = NovelFingerprint(g_dict, s_dict, b_dict,
                              groups, bridges, subs)
         mol.set_novel_fp(mfp)
         return mfp
         
     def get_mol_fingerprints(self):
-        
+        """ 
+        Generate the novel fingerprint for every molecule.
+        """
         try:
             return self._fps
         except AttributeError:
@@ -152,7 +140,9 @@ class NovelFingerprint:
         return self._fps
     
     def get_group_fps(self, counts=False, exclude_benz=False):
-        
+        """ 
+        A query for finding all molecules with the same groups.
+        """
         self.get_mol_fingerprints()
         mols = self.md.clean_mols()
         g_fps = mols.apply(lambda x: x.get_novel_fp().get_group_fp(counts))
@@ -165,27 +155,37 @@ class NovelFingerprint:
         return g_fps
     
     def get_full_fps(self, as_set=True):
+        """
+        Return a series of novel fingerprints for every molecule
+        """
         self.get_mol_fingerprints()
         mols = self.md.clean_mols()
-        fps = mols.apply(lambda x: x.get_novel_fp().get_full_fp(as_set))
+        fps = mols.apply(lambda x: 
+                         x.get_novel_fp().get_full_fp(as_set))
         return fps
     
     def get_sub_fps(self, counts=False):
-        
+        """
+        Return a series of novel fingerprints (subs only).
+        """
         self.get_mol_fingerprints()
         mols = self.md.clean_mols()
         s_fps = mols.apply(lambda x: x.get_novel_fp().get_sub_fp(counts))
         return s_fps
   
     def get_bridge_fps(self, counts=False):
-        
+        """
+        Return a series of novel fingerprints (bridges only).
+        """        
         self.get_mol_fingerprints()
         mols = self.md.clean_mols()
         b_fps = mols.apply(lambda x: x.get_novel_fp().get_bridge_fp(counts))
         return b_fps
     
     def group_fp_query(self, g_query, complete, counts):
-        
+        """
+        Return a series of novel fingerprints (groups only).
+        """       
         if counts:
             g_fps = self.get_group_fps(counts=True)
         else:
@@ -292,8 +292,12 @@ class NovelFingerprint:
         ret_dict = {fp: mol_ids for fp, mol_ids in tmp_dict.items()
            if any(item in mols_with_sub for item in mol_ids) and len(mol_ids) > 1}
         return ret_dict
+        
                       
-class MolFingerprint:
+class NovelFingerprint:
+    """
+    The class representing the novel fingerprint object
+    """
     
     def __init__(self, groups, subs, bridges, *args):
         self._g_dict = groups
@@ -380,4 +384,60 @@ class MolFingerprint:
         stream = draw_to_png_stream(mols, lgnds, to_disc=False)
 
         return stream
+    
+class BasicFingerprint:
+    """
+    A class that exposes common fingerprint schemes.
+    
+    If each molecule has its own BasicFingerprint object
+    then it can easily access a number of common fingerprint
+    encodings.
+    """
+    def __init__(self, mol=None):
+        self._fp_dict = {}
+        self.fp_map = {"MACCS": self._calc_MACCS, "morgan": self._calc_morgan,
+                  "rdk": self._calc_rdk, "morgan_feat": self._calc_morgan_feat,
+                  "topology": self._calc_topology}
+        self._mol = mol
+    
+    def _calc_all(self):
+        for method, fp_func in self.fp_map.items():
+            if not method in self._fp_dict:
+                fp_func()
+
+    def _calc_MACCS(self):
+        self.MACCS = MACCSkeys.GenMACCSKeys(self._mol)
+        self._fp_dict['MACCS'] = self.MACCS
+        
+    def _calc_morgan(self):
+        self.morgan = Chem.GetMorganFingerprintAsBitVect(self._mol, 
+                                                         2, nBits=1024)
+        self._fp_dict['morgan'] = self.morgan
+        
+    def _calc_rdk(self):
+        self.rdk = Chem.RDKFingerprint(self._mol)
+        self._fp_dict['rdk'] = self.rdk
+        
+    def _calc_morgan_feat(self):
+        self.morgan_feat = Chem.GetMorganFingerprintAsBitVect(
+            self._mol ,2, nBits=1024, useFeatures=True)
+        self._fp_dict['morgan_feat'] = self.morgan_feat
+        
+    def _calc_topology(self):
+        self.topology = Chem.GetMorganFingerprintAsBitVect(
+            self._mol, 2, nBits=1024, 
+            invariants=[1]*self._mol.GetNumAtoms())
+        self._fp_dict['topology'] = self.topology
+        
+    def get_fp(self, fp_type):
+        if fp_type == "all":
+            self._calc_all()
+            return self._fp_dict
+        try:
+            return self._fp_dict[fp_type]
+        except KeyError:
+            fp_func = self.fp_map[fp_type]
+            fp_func()
+        return self._fp_dict[fp_type]
+    
            

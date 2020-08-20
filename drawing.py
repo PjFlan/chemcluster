@@ -1,9 +1,10 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Mon Aug  3 11:59:48 2020
-
-@author: padraicflanagan
+This module handles all the drawing functionality
+needed throughout the application.
+The functions here act as a wrappers over the RDKit
+drawing functionality to draw molecules to
+file in a variety of formats with legends and
+varying resolutions depending on the need.
 """
 import math
 import os
@@ -107,7 +108,6 @@ def draw_to_svg_stream(mols, legends=[], to_disc=False):
     d2d.FinishDrawing()
     return d2d.GetDrawingText()  
            
-
 def draw_entities(entities, outdir, from_idx, to_idx):
     freqs = entities.apply(lambda x: x.occurrence)
     freq_df = pd.concat([entities, freqs], axis=1)

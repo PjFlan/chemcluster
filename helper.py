@@ -1,16 +1,15 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Sat May  9 14:40:36 2020
-@author: padraicflanagan
+This module defines a number of helper utilites
+that handle tasks such as writing to and loading
+from disk, getting config options, logging functionality
+and and bespoke error classes.
 """
-
 import os, shutil
 try:
    import cPickle as pickle
 except:
    import pickle
-from datetime import datetime
+
 import json
 import logging
 

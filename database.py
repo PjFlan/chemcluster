@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Sat Aug  1 13:30:31 2020
-
-@author: padraicflanagan
+This module manages database I/O and also
+the link tables that store many-to-many
+associations between entities.
 """
 import os
 

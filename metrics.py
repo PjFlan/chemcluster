@@ -1,3 +1,9 @@
+"""
+This module exposes a number of functions for
+exploring the  database in terms of distributions
+of both types of molecules and the computational data.
+There is a child class for each of the different entities.
+"""
 import os
 import math
 import random

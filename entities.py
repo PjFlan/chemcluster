@@ -1,3 +1,10 @@
+"""
+The classes for each entity are defined here.
+The different entities are: molecules, fragments,
+groups, substituents and bridges. Each entity object
+must have a valid SMILES representation, even if dummy
+atoms are included.
+"""
 import re
 
 from rdkit.Chem import AllChem as Chem

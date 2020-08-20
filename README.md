@@ -23,7 +23,9 @@ This code was developed for the Molecular Engineering group at University of Cam
 It is highly recommended that the code snippets below are run from an interactive Python console such as IPython. In this way, images of molecules are printed to screen and exploratory analysis is simplified greatly. It will be assumed that these snippets are run interactively.
 ### Run the Fragmentation Algorithm and Analyse Fragments
 
-Firstly it necessary to generate and classify the fragment entities. Then we will draw the 40 most frequently occurring of each class (raw BRICS fragments, core groups, substituents and bridges) to disk. Here the frequency refers to the number of molecules in which the fragment appears at least once.
+Firstly it is necessary to generate and classify the fragment entities. The first time this is run it will take a couple of minutes. The objects will then be saved to pickle files and should be loaded instantly in future. We will draw the 40 most frequently occurring of each class (raw BRICS fragments, core groups, substituents and bridges) to disk. Here the frequency refers to the number of molecules in which the fragment appears at least once.
+
+It should be noted that in this application most of the heavy-lifting in terms of algorithms takes place in the `DAL.py` file.
 ```python
 from chemcluster import ChemCluster
 
@@ -80,6 +82,7 @@ Molecules with the same core groups (with counts) only differ by their substitue
 from chemcluster import ChemCluster
 
 cc = ChemCluster()
+
 cc.generate_fragments()
 cc.generate_novel_fps()
 
@@ -125,12 +128,13 @@ cc.q_diff_substituents(sub_id=114, draw=True,
 
 ### Plotting Database distributions
 
-A number of convenient plots and distributions are defined in the `metrics.py` file. Only some of these are exposed via the `ChemCluster` class, but the `Metric` classes can of course be imported and used, provided they are instantiated with the necessary `Data` objects (as in `chemcluster.py`).
+A number of convenient plots and distributions are defined in the `metrics.py` file. Only some of these are exposed via the `ChemCluster` class, but the `Metric` classes can of course be imported and used, provided they are instantiated with the necessary `Data` objects (as in `chemcluster.py`). Three example distribution plots are shown below.
 
-```
+```python
 from chemcluster import ChemCluster
 
 cc = ChemCluster()
+
 cc.novel_fp_scatter(min_size=15, counts=True)
 cc.comp_dist_plot()
 
@@ -139,23 +143,64 @@ groups = ["coumarin","azo","anthraquinone",
           "triarylmethane","thiophene","benzothiazole"]
 cc.group_violin_plots(groups)
 ```
+### Convenience Functions
+We can get a similarity report for any two molecules:
+```python
+cc.similarity_report(mol_ids=[1500, 1510])
+```
+| Fingerprint      | Metric | Similarity
+| ----------- | ----------- | ----------
+|MACCS        |dice      |0.475248
+|      |tanimoto  |0.311688
+|Morgan       |dice      |0.26
+|     |tanimoto  |0.149425
+|RDKit          |dice      |0.632669
+|       |tanimoto  |0.462703
+|Morgan feature  |dice      |0.268293
+|  |tanimoto  |0.15493
+|Topology     |dice      |0.4
+|     |tanimoto  |0.25
+
+We can also find the average similarity across the entire database of a certain fingerprint/metric combination. This also returns an estimate for the average distance from the true similarity value in terms of wavelength similarities.
+```python
+avg_fp, avg_error = cc.average_fp_sim(fp_type='rdk',
+                                      metric='dice')
+```
+
+The core groups can be clustered using the Butina clustering algorithm and a fingerprint/similarity of choice. I have also developed my own basic clustering algorithm but this is still in progress.
+```python
+cc.draw_group_clusters(cutoff=0.2, fp_type='MACCS', similarity='dice')
+```
 ## Installation & Requirements
 
 To install, simply clone the repository:
 ```
-git clone https://github.com/LiamWilbraham/pychemlp.git
+git clone https://github.com/PjFlan/chemcluster.git
 ```
-and add the location of the pychemlp repository to your PYTHONPATH.
+and open the directory using an interactive development environment such as Spyder. It is highly recommended to install Anaconda to manage packages and run this code in Spyder. See (https://docs.anaconda.com/anaconda/user-guide/getting-started/).
 
 The module requires the following packages (all can be installed via conda):
 
-* tensorflow (https://www.tensorflow.org/install/)
-* scikit-learn (https://scikit-learn.org/stable/install.html)
 * pandas (https://anaconda.org/anaconda/pandas)
-* numpy (https://anaconda.org/anaconda/numpy)
 * rdkit (https://www.rdkit.org/docs/Install.html)
+* pymongo (https://pymongo.readthedocs.io/en/stable/)
+* seaborn (https://seaborn.pydata.org/)
+* tabulate (https://pypi.org/project/tabulate/)
+* matplotlib (https://matplotlib.org/3.1.1/users/installing.html)
 
 rdkit may be installed via conda (recommended):
 ```
 conda install -c rdkit rdkit
 ```
+
+The MongoDB version of the database (recommended) can be downloaded from (https://doi.org/10.6084/m9.figshare.7619672.v2) although it is not strictly necessary, since the relevant data has been dumped to text files inside the /input directory. There is a flag in the `config.json` file called 'db' for reloading data from the database but this is turned off by default.
+
+## Configuration
+
+The file `config.json` contains a number of configuration settings. The options should not be deleted, though the values can be changed. The main parameter that might need to be changed is the `root` directory, which specifies the base directory for all output files (images and plots).
+
+The `tmp` parameter can be switched on if just looking to quickly inspect a cluster of molecules. The files in this folder are deleted the next time tmp is used.
+
+The `regenerate` option can be used to rerun any of the algorithms from scratch i.e ignore and pickle files or .txt files.
+
+Finally, there is logging functionality implemented in each class. This is a wrapper over the Python logging module, where each class has its own child logger so that the name of the class from which the message was logged is output to the log message. Every class logger has a level of DEBUG which should not be changed. Instead, to change the verbosity, adjust the logging level in `config.json` to one of 10, 20, 30, 40 or 50.

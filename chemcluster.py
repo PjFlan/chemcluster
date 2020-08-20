@@ -1,15 +1,16 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Thu Jul 30 13:25:29 2020
-
-@author: padraicflanagan
+This is the main entry-point module for
+the application. There is very little in terms
+of logic or algorithms in here - it is principally
+just a wrapper for the functionality exposed by
+other modules. The majority of the application logic 
+is found in DAL.py.
 """
 import os
 
 from DAL import MoleculeData, FragmentData, GroupData, ChainData
 from metrics import FragmentMetric, MoleculeMetric, GroupMetric
-from fingerprint import NovelFingerprint
+from fingerprint import NovelFingerprintData
 
 from helper import MyConfig, MyLogger, MyFileHandler
 from helper import FingerprintNotSetError
@@ -22,7 +23,7 @@ class ChemCluster:
         self.fd = FragmentData(self.md)
         self.gd = GroupData(self.md, self.fd)
         self.cd = ChainData(self.md, self.fd, self.gd)
-        self.nfp = NovelFingerprint(self.md, self.fd, self.gd, self.cd)
+        self.nfp = NovelFingerprintData(self.md, self.fd, self.gd, self.cd)
         self.mm = MoleculeMetric(self.md, self.fd, self.gd, self.cd, self.nfp)
         self.fm = FragmentMetric(self.md, self.fd, self.gd, self.cd, self.nfp)
         self.gm = GroupMetric(self.md, self.fd, self.gd, self.cd, self.nfp)
@@ -259,17 +260,19 @@ class ChemCluster:
         frag_dir = os.path.join(self._config.get_directory('images'),'fragments')
         draw_entities(frags, frag_dir, from_idx, to_idx)        
        
-    def draw_group_clusters(self, clust_nums=None, singletons=False, from_idx=0, to_idx=200):
+    def draw_group_clusters(self,  cutoff=0.2, fp_type='MACCS', similarity='dice', 
+                            singletons=False, from_idx=0, to_idx=200, clust_nums=None):
         
         cgm = self.gd.get_group_clusters()
         if not clust_nums:
             clust_nums = range(0, cgm['cluster_id'].max() + 1)
-        for clust_num in clust_nums[23:24]:
+        for clust_num in clust_nums:
             group_indices = cgm[clust_num == cgm['cluster_id']]['group_id']
             groups_tmp = self.groups[group_indices]
             if (not singletons) and groups_tmp.size == 1:
                 continue
-            cluster_dir = os.path.join(self._config.get_directory('images'),f'clusters/cluster_{clust_num}/')
+            cluster_dir = os.path.join(self._config.get_directory('images'),
+                                       f'clusters/cluster_{clust_num}/')
             draw_entities(groups_tmp, cluster_dir, from_idx, to_idx)
            
     def novel_fp_scatter(self, min_size, counts=True, save_as=None):
@@ -285,6 +288,7 @@ class ChemCluster:
         return self.gd.get_group_cluster(group_id)
     
     def draw_group_cluster_mols(self, cluster_id):
+
         group_idx = self.gd.get_cluster_groups(cluster_id)
         groups = self.groups[group_idx]
 
