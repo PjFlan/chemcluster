@@ -44,9 +44,9 @@ class ChemCluster:
             self._fh.clean_dir(outdir)
         return outdir   
     
-    def _large_comp_diff(self, mols, lam_thresh=75, osc_thresh=0.6):
+    def _large_comp_diff(self, mols, lam_thresh=75, osc_thresh=0.5):
         lambdas = mols.apply(lambda x: x.get_lambda_max())
-        osc = mols.apply(lambda x: x.strength_max)
+        osc = mols.apply(lambda x: x.get_strength_max())
         lam_diff = lambdas.max() - lambdas.min()
         osc_diff = osc.max() - osc.min()
 
@@ -63,6 +63,7 @@ class ChemCluster:
         self.subs = self.cd.get_substituents(regen)
         self.bridges = self.cd.get_bridges(regen)
         self.md.set_comp_data()
+        self.nfp.set_up()
 
     def generate_novel_fps(self):
         
@@ -128,8 +129,10 @@ class ChemCluster:
             for key, mol_ids in sim_mols.items():
                 mols_tmp = mols[mol_ids]
                 if not large_comp_diff or self._large_comp_diff(mols_tmp):
-                    legends = mols_tmp.apply(lambda x: x.get_legend(self.DEV_FLAG))
-                    draw_mols_canvas(mols_tmp, legends, outdir, suffix=key, clean_dir=False)
+                    legends = mols_tmp.apply(lambda x: 
+                                             x.get_legend(self.DEV_FLAG))
+                    draw_mols_canvas(mols_tmp, legends, 
+                                     outdir, suffix=key, clean_dir=False)
             return None
         if query:
             return mols[sim_mols[query]]
@@ -144,7 +147,8 @@ class ChemCluster:
             if query:
                 return mols[list(mol_sets[query])]
             return mol_sets
-        
+        if query:
+            return mols[mol_sets[query]]      
         outdir = self._setup_query_folder(folder)
         for key, mol_ids in mol_sets.items():
             m_ids = list(mol_ids)
@@ -155,32 +159,37 @@ class ChemCluster:
             if key == '2':
                 continue
             draw_mols_canvas(mols_tmp, legends, outdir, suffix=key, clean_dir=False)
-        if query:
-            return mols[mol_sets[query]]
-        return mol_sets
         
     def q_diff_topology(self, draw=True, large_comp_diff=False):
         mol_subsets = self.nfp.mols_diff_topology()
         folder = f'diff_topology_{large_comp_diff}'
         outdir = self._setup_query_folder(folder)
-        if draw:
-            for fp, mol_ids in mol_subsets.items():
-                mols_tmp = self.mols[mol_ids]
-                if not large_comp_diff or self._large_comp_diff(mols_tmp):
-                    legends = mols_tmp.apply(lambda x: x.get_legend(self.DEV_FLAG))
-                    draw_mols_canvas(mols_tmp, legends, outdir, suffix=fp, clean_dir=False)
-        return mol_subsets
-    
-    def q_diff_sub(self, sub_id, draw=True):
+        if not draw:
+            return mol_subsets
+
+        for fp, mol_ids in mol_subsets.items():
+            mols_tmp = self.mols[mol_ids]
+            if not large_comp_diff or self._large_comp_diff(mols_tmp):
+                legends = mols_tmp.apply(lambda x: 
+                                         x.get_legend(self.DEV_FLAG))
+                draw_mols_canvas(mols_tmp, legends, 
+                                 outdir, suffix=fp, clean_dir=False)
+
+    def q_diff_substituents(self, sub_id, draw=True, large_comp_diff=False):
         mol_subsets = self.nfp.same_fp_except_sub(sub_id)
         folder = f'same_except_{sub_id}'
         outdir = self._setup_query_folder(folder)
-        if draw:
-            for fp, mol_ids in mol_subsets.items():
-                mols_tmp = self.mols[mol_ids]
-                legends = mols_tmp.apply(lambda x: x.get_legend(self.DEV_FLAG))
-                draw_mols_canvas(mols_tmp, legends, outdir, suffix=fp, clean_dir=False)               
-        return mol_subsets
+        if not draw:
+            return mol_subsets
+
+        for fp, mol_ids in mol_subsets.items():
+            mols_tmp = self.mols[mol_ids]
+            if not large_comp_diff or self._large_comp_diff(mols_tmp):
+                legends = mols_tmp.apply(lambda x: 
+                                         x.get_legend(self.DEV_FLAG))
+                draw_mols_canvas(mols_tmp, legends, 
+                                 outdir, suffix=fp, clean_dir=False)               
+
             
     def similarity_report(self, mol_ids):
         report, table = self.mm.similarity(mol_ids)
@@ -278,10 +287,10 @@ class ChemCluster:
     def novel_fp_scatter(self, min_size, counts=True, save_as=None):
         self.gm.group_fp_scatter(min_size, counts, save_as)
         
-    def comp_dist_plot(self, save_as):
+    def comp_dist_plot(self, save_as=None):
         self.mm.comp_hexbin(save_as)
         
-    def group_violin_plots(self, groups, save_as):
+    def group_violin_plots(self, groups, save_as=None):
         self.mm.group_lambda_dist(groups, save_as)
         
     def get_group_cluster(self, group_id):

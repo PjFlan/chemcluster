@@ -1,4 +1,4 @@
-# chemcluster
+# ChemCluster
 Easy-to-use python module for clustering a database of 4,591 unique optically active organic molecules according to user-defined similarity queries.
 
 `chemcluster` combines molecular fragmentation and chemical intuition to identify the core groups, bridges and substituents of a database of molecules in the domain of organic spectroscopy. These classified fragments are then used to create a novel fingerprint for each molecule that allows more chemically relevant similarity comparisons than afforded using traditional fingerprinting schemes, such as Extended-Connectivity FingePrints (ECFPs). The novel similarity comparisons are used to generate clusters of similar molecules which can be drawn together on file along with their computational data so that trends in the absorption properties can be studied. The large repository of classified fragments generated as part of this application may also be used for fragment-based materials discovery.
@@ -23,14 +23,15 @@ This code was developed for the Molecular Engineering group at University of Cam
 It is highly recommended that the code snippets below are run from an interactive Python console such as IPython. In this way, images of molecules are printed to screen and exploratory analysis is simplified greatly. It will be assumed that these snippets are run interactively.
 ### Run the Fragmentation Algorithm and Analyse Fragments
 
-Firstly it is necessary to generate and classify the fragment entities. The first time this is run it will take a couple of minutes. The objects will then be saved to pickle files and should be loaded instantly in future. We will draw the 40 most frequently occurring of each class (raw BRICS fragments, core groups, substituents and bridges) to disk. Here the frequency refers to the number of molecules in which the fragment appears at least once.
+Firstly it is necessary to generate and classify the fragment entities. The first time this is run it will take a couple of minutes. The objects will then be saved to pickle files and should be loaded instantly in future.
 
-It should be noted that in this application most of the heavy-lifting in terms of algorithms takes place in the `DAL.py` file.
+As an overview, the 40 most frequently occurring entities of each class (raw BRICS fragments, core groups, substituents and bridges) are drawn to disk. The directory where images are drawn to can be altered in `config.json`. The 'frequency' refers to the number of molecules in which the fragment appears at least once.
+
 ```python
 from chemcluster import ChemCluster
 
 cc = ChemCluster()
-cc.generate_fragments()
+cc.generate_fragments() #takes a few minutes
 
 cc.draw_fragments(from_idx=0, to_idx=40)
 cc.draw_groups(from_idx=0, to_idx=40)
@@ -46,7 +47,7 @@ group.get_size() #number of heavy atoms
 rdk_mol = group.get_rdk_mol() #RDKit.Mol object
 
 #Draw the molecules that contain this group
-cc.draw_entity_mols(ent_name='group', ent_id=209)
+cc.draw_entity_mols(ent_type='group', ent_id=209)
 ```
 where the options for `ent_name` are: group, fragment, substituent and bridge.
 
@@ -58,7 +59,7 @@ cc.generate_novel_fps()
 
 #choose a sample molecule and draw to console
 mol = cc.get_molecule(mol_id=3321)
-mol
+mol #wavelength and strength in legend
 
 #output fingerprint to console
 mol.get_novel_fp()
@@ -88,15 +89,15 @@ cc.generate_novel_fps()
 
 cc.q_same_groups(counts=True, draw=True)
 ```
-This will produce a lot of files, one per subset (or multiple per subset if there are more than 20 molecules in the subset). The files are named using the group fingerprint i.e. the groups the molecules in that file share in common. For example, a file named '(2,2)\_(9,1).1-20.png' means the molecules in this file all have 2 instances of group 2, and 1 instance of group 9 (and that its the first 20 molecules of this subset, hence 1-20).
+This will produce a lot of files, one per subset (or multiple per subset if there are more than 20 molecules in the subset). The files are named using the group fingerprint i.e. the groups the molecules in that file share in common. For example, a file named '(2,2)\_(8,1).1-20.png' means the molecules in this file all have 2 instances of group 2, and 1 instance of group 8 (and that its the first 20 molecules of this subset, hence 1-20).
 
 Since there are many files, it would be useful to only draw those subsets where there is a large computational variance between the molecules in the subset. This can be achieved by setting `large_comp_diff=True`.
 
 If the user is only interested in subsets that contain a particular group, for example azo, then they can specify the SMARTS pattern of this group in patterns.txt and modify the query: `cc.q_same_groups(counts=True, pattern='azo', draw=True)`.
 
-Finally, it might be of benefit to retrieve the molecule objects in a particular subset. For example, to calculate the average similarity between them using an existing finerprinting scheme. The is the purpose of the `query` parameter, which needs to be set to the name of the file from which the subset originates (only the fingerprint segment of the file).
+Finally, it might be of benefit to retrieve the molecule objects in a particular subset. For example, to calculate the average similarity between them using an existing fingerprinting scheme. The is the purpose of the `query` parameter, which needs to be set to the name of the file from which the subset originates (only the fingerprint segment of the file).
 ```python
-mols = cc.q_same_groups(counts=True, query='(2,2)\_(9,1)', draw=False)
+mols = cc.q_same_groups(counts=True, query='(2, 2)_(8, 1)', draw=False)
 cc.average_cluster_sim(mols=mols, fp_type='morgan', metric='dice')
 ```
 
@@ -112,7 +113,6 @@ We need to provide the group_id of the group we wish to isolate, so the first st
 ```python
 #check images to find the correct ID
 cc.get_groups_with_pattern(pattern='thiophene', draw=True)
-
 cc.q_diff_counts(group_id=31, draw=True)
 ```
 
@@ -121,9 +121,7 @@ For the final query, we will choose to analyse those molecules where the only di
 ```python
 #check images to find the correct ID
 cc.get_subs_with_pattern(pattern='cyanide', draw=True)
-
-cc.q_diff_substituents(sub_id=114, draw=True,
-                      large_comp_diff=True)
+cc.q_diff_substituents(sub_id=114, draw=True)
 ```
 
 ### Plotting Database distributions
@@ -137,7 +135,6 @@ cc = ChemCluster()
 
 cc.novel_fp_scatter(min_size=15, counts=True)
 cc.comp_dist_plot()
-
 #SMARTS for these groups must be in patterns.txt
 groups = ["coumarin","azo","anthraquinone",
           "triarylmethane","thiophene","benzothiazole"]
@@ -169,6 +166,7 @@ avg_fp, avg_error = cc.average_fp_sim(fp_type='rdk',
 
 The core groups can be clustered using the Butina clustering algorithm and a fingerprint/similarity of choice. I have also developed my own basic clustering algorithm but this is still in progress.
 ```python
+cc.generate_fragments()
 cc.draw_group_clusters(cutoff=0.2, fp_type='MACCS', similarity='dice')
 ```
 ## Installation & Requirements

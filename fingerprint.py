@@ -27,7 +27,6 @@ class NovelFingerprintData:
                  chain_data):
         self.md, self.fd, self.gd, self.cd =\
         mol_data, frag_data, group_data, chain_data
-        self.set_up()
     
     def set_up(self):
         self._mols = self.md.get_molecules()
@@ -148,9 +147,11 @@ class NovelFingerprintData:
         g_fps = mols.apply(lambda x: x.get_novel_fp().get_group_fp(counts))
         if exclude_benz:
             if counts:
-                is_only_benzene = g_fps.apply(lambda x: len(x) == 1 and list(x)[0][0] == 2)
+                is_only_benzene = g_fps.apply(
+                    lambda x: len(x) == 1 and list(x)[0][0] == 2)
             else:
-                is_only_benzene = g_fps.apply(lambda x: len(x) == 1 and list(x)[0] == 2)
+                is_only_benzene = g_fps.apply(
+                    lambda x: len(x) == 1 and list(x)[0] == 2)
             g_fps = g_fps[~is_only_benzene]
         return g_fps
     
@@ -221,8 +222,12 @@ class NovelFingerprintData:
         if pattern:
             mol_patt_ids = self.md.find_mols_with_pattern(
                 pattern, clean_only=True).index
-            g_fps = self.get_group_fps(counts, 
-                                       exclude_benz=exclude_benz).loc[mol_patt_ids]
+            
+            g_fps = self.get_group_fps(
+                counts, exclude_benz=exclude_benz)
+            mol_ids = list(set.intersection(set(mol_patt_ids), 
+                                       set(g_fps.index)))
+            g_fps = g_fps[mol_ids]
         else:
             g_fps = self.get_group_fps(counts, exclude_benz=exclude_benz)
         g_fps = g_fps.apply(self._prep_fp_for_grouping)

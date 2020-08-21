@@ -189,7 +189,7 @@ class GroupMetric(Metric):
         comb_df.columns = ['Wavelength', 'Strength', 'Category', 'Fingerprint']
         
         flatui = ["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"]
-        self._set_fonts(large=True)
+        #self._set_fonts(large=True)
         plots = len(sim_mols)//6
         shape = (plots//2, plots//2)
         figsize = (13*shape[0], 8*shape[1])
@@ -234,7 +234,7 @@ class MoleculeMetric(Metric):
         
     def mult_dist_plot(self, shape, metrics=None, bin_sizes=[], 
                        painters=None, save_as=None):
-        self.set_fonts()
+        #self.set_fonts()
         figsize = (10*shape[0], 8*shape[0])
         fig, axs = plt.subplots(*shape, sharey=True, figsize=figsize)
         if len(axs.flat) != len(metrics):
@@ -247,7 +247,7 @@ class MoleculeMetric(Metric):
         self._process_plot(save_as)
         
     def dist_plot(self, metric, paint, bin_size=1, ax=None, is_mult=False, save_as=None):
-        self.set_fonts()
+        #self.set_fonts()
         if not ax:
             ax = plt.gca()
         dist_func = self.dist_func_map[metric]
