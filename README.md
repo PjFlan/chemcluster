@@ -7,6 +7,30 @@ Additionally, `chemcluster` exposes a number of functions for obtaining an overv
 
 This code was developed for the Molecular Engineering group at University of Cambridge as part of my MPhil in Scientific Computing. The database of molecules and their computational properties was created by the Molecular Engineering group.
 
+## Installation & Requirements
+
+To install, simply clone the repository:
+```
+git clone https://github.com/PjFlan/chemcluster.git
+```
+and open the directory using an interactive development environment such as Spyder. It is highly recommended to install Anaconda to manage packages and run this code in Spyder. See (https://docs.anaconda.com/anaconda/user-guide/getting-started/).
+
+The module requires the following packages (all can be installed via conda):
+
+* pandas (https://anaconda.org/anaconda/pandas)
+* rdkit (https://www.rdkit.org/docs/Install.html)
+* pymongo (https://pymongo.readthedocs.io/en/stable/)
+* seaborn (https://seaborn.pydata.org/)
+* tabulate (https://pypi.org/project/tabulate/)
+* matplotlib (https://matplotlib.org/3.1.1/users/installing.html)
+
+rdkit may be installed via conda (recommended):
+```
+conda install -c rdkit rdkit
+```
+
+The MongoDB version of the database (recommended) can be downloaded from (https://doi.org/10.6084/m9.figshare.7619672.v2) although it is not strictly necessary, since the relevant data has been dumped to text files inside the /input directory. There is a flag in the `config.json` file called 'db' for reloading data from the database but this is turned off by default.
+
 ## Functionality
 
 * Apply BRICS fragmentation to ~4,500 optically active organic molecules
@@ -169,29 +193,6 @@ The core groups can be clustered using the Butina clustering algorithm and a fin
 cc.generate_fragments()
 cc.draw_group_clusters(cutoff=0.2, fp_type='MACCS', similarity='dice')
 ```
-## Installation & Requirements
-
-To install, simply clone the repository:
-```
-git clone https://github.com/PjFlan/chemcluster.git
-```
-and open the directory using an interactive development environment such as Spyder. It is highly recommended to install Anaconda to manage packages and run this code in Spyder. See (https://docs.anaconda.com/anaconda/user-guide/getting-started/).
-
-The module requires the following packages (all can be installed via conda):
-
-* pandas (https://anaconda.org/anaconda/pandas)
-* rdkit (https://www.rdkit.org/docs/Install.html)
-* pymongo (https://pymongo.readthedocs.io/en/stable/)
-* seaborn (https://seaborn.pydata.org/)
-* tabulate (https://pypi.org/project/tabulate/)
-* matplotlib (https://matplotlib.org/3.1.1/users/installing.html)
-
-rdkit may be installed via conda (recommended):
-```
-conda install -c rdkit rdkit
-```
-
-The MongoDB version of the database (recommended) can be downloaded from (https://doi.org/10.6084/m9.figshare.7619672.v2) although it is not strictly necessary, since the relevant data has been dumped to text files inside the /input directory. There is a flag in the `config.json` file called 'db' for reloading data from the database but this is turned off by default.
 
 ## Configuration
 
