@@ -8,3 +8,4 @@ tmp/
 *.log
 __pycache__/
 playground.py
+.idea
