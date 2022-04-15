@@ -1,5 +1,5 @@
 # ChemCluster
-Easy-to-use python module for clustering a database of 4,591 unique optically active organic molecules according to user-defined similarity queries.
+Python module for clustering a database of 4,591 unique optically active organic molecules according to user-defined similarity queries.
 
 `chemcluster` combines molecular fragmentation and chemical intuition to identify the core groups, bridges and substituents of a database of molecules in the domain of organic spectroscopy. These classified fragments are then used to create a novel fingerprint for each molecule that allows more chemically relevant similarity comparisons than afforded using traditional fingerprinting schemes, such as Extended-Connectivity FingePrints (ECFPs). The novel similarity comparisons are used to generate clusters of similar molecules which can be drawn together on file along with their computational data so that trends in the absorption properties can be studied. The large repository of classified fragments generated as part of this application may also be used for fragment-based materials discovery.
 
